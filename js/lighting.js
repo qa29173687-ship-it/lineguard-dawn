@@ -71,10 +71,12 @@ const Light = {
   },
   shadowBatch(ctx) {
     if (this.off.shadow) return;
-    const top = CFG.MAP_TOP - 10, bot = CFG.MAP_BOTTOM + 10, m = ctx.getTransform(), s = m.a;
-    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const v = Cam.view(30), m = ctx.getTransform(), s = m.a;   // 只畫鏡頭看得到的（世界座標）
+    const zooming = Cam.zooming();   // 縮放進行中：倍率每幀都變 → 不重建快取，直接縮放繪製
+    ctx.save(); if (!zooming) ctx.setTransform(1, 0, 0, 1, 0, 0);
     const put = (x, y, w) => {
-      if (y < top || y > bot || x < -20 || x > CFG.W + 20) return;
+      if (y < v.y0 || y > v.y1 || x < v.x0 || x > v.x1) return;
+      if (zooming) { ctx.globalAlpha = w >= 28 ? 1 : 0.8; ctx.drawImage(this.shadow, x - w / 2, y - w / 4, w, w / 2); return; }
       const c = this._sh(w, s);
       ctx.drawImage(c, Math.round(m.e + (x - w / 2) * s), Math.round(m.f + (y - w / 4) * s));
     };

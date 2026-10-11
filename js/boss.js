@@ -7,6 +7,7 @@ const Boss = {
   active: null, DUR: 3.8,
   HITS: [0.0, 1.55, 1.95, 2.35, 2.75, 3.1],   // 與 boss_intro 音效的鼓點對齊
   start(e) {
+    if (typeof Cam !== 'undefined') Cam.followEntity(e, (CFG.BOSS_INTRO ? this.DUR : 0) + 2.8);   // 鏡頭帶到首領身上、短暫跟隨
     if (!CFG.BOSS_INTRO) { sfx('boss_roar'); banner('首領來襲！格魯姆', '', 2); return; }
     this.active = { e, t: 0 };
     G.targeting = false; G.menu = null;

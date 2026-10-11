@@ -27,9 +27,10 @@ function paintRoads(x) {
 }
 function buildBackground() {
   R.bgFit = null;   // 裝置解析度快取，下次繪製時重建
-  if (!R.dark) { R.dark = document.createElement('canvas'); R.dark.width = 180; R.dark.height = 320; }
+  // 夜色層：世界的 1/2 解析度（2 世界像素一格），跟著鏡頭一起變換
+  if (!R.dark || R.dark.width !== CFG.WW / 2) { R.dark = document.createElement('canvas'); R.dark.width = CFG.WW / 2; R.dark.height = CFG.WH / 2; R.darkStatic = null; R.darkKey = ''; }
   if (R.mapImg) {
-    const W = CFG.W, H = CFG.H, c = document.createElement('canvas'); c.width = W * 2; c.height = H * 2;
+    const W = CFG.WW, H = CFG.WH, c = document.createElement('canvas'); c.width = W * 2; c.height = H * 2;
     const x = c.getContext('2d'); x.scale(2, 2); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
     x.drawImage(R.mapImg, 0, 0, W, H);
     if (CFG.MAP_BG_OVERLAY) paintRoads(x);
@@ -38,20 +39,20 @@ function buildBackground() {
   // 背景以 2 倍解析度繪製（正式素材是 2 倍圖），固定亂數種子：素材載入後重畫時版面不變
   let seed = 1234567; const rand = (a, b) => { seed = (seed * 16807) % 2147483647; return a + (seed / 2147483647) * (b - a); };
   const rnd = () => rand(0, 1);
-  const W = CFG.W, H = CFG.H, c = document.createElement('canvas'); c.width = W * 2; c.height = H * 2;
+  const W = CFG.WW, H = CFG.WH, c = document.createElement('canvas'); c.width = W * 2; c.height = H * 2;
   const x = c.getContext('2d'); x.scale(2, 2); x.imageSmoothingEnabled = false;
   const path = makePath(CFG.PATH), road = makePath(CFG.ROAD);
   const grass = ['#5a9e3a', '#63a83f', '#559636', '#6bb045'], rear = ['#7aa84a', '#82b051', '#73a145'];
   const dirt = ['#b08850', '#a67f48', '#bb935a'], roadC = ['#d8c08a', '#cfb57d'];
   const cell = 3;
-  for (let j = CFG.MAP_TOP; j < CFG.MAP_BOTTOM; j += cell) for (let i = 0; i < W; i += cell) {
+  for (let j = 0; j < H; j += cell) for (let i = 0; i < W; i += cell) {
     const cx = i + cell / 2, cy = j + cell / 2;
     const dp = distToPath(path, cx, cy), dr = distToPath(road, cx, cy);
     let col;
     if (dp < 11) col = dirt[(rnd() * 3) | 0];
     else if (dp < 13) col = '#7f6236';
     else if (dr < 5) col = roadC[(rnd() * 2) | 0];
-    else if (cy > 458) col = rear[(rnd() * 3) | 0];
+    else if (cy > 458 * CFG.WS) col = rear[(rnd() * 3) | 0];
     else col = grass[(rnd() * 4) | 0];
     x.fillStyle = col; x.fillRect(i, j, cell, cell);
   }
@@ -64,7 +65,7 @@ function buildBackground() {
     || Math.hypot(CFG.GRANARY.x - tx, CFG.GRANARY.y - ty) < 30;
   const trees = [];
   for (let n = 0; n < 900 && trees.length < 70; n++) {
-    const tx = rand(4, W - 4), ty = rand(CFG.MAP_TOP + 10, 470);
+    const tx = rand(4, W - 4), ty = rand(CFG.WTOP + 10, 470 * CFG.WS);
     const dense = ty < 75 ? 0.9 : 0.35;
     if (rnd() > dense || avoid(tx, ty) || trees.some(t => Math.hypot(t.x - tx, t.y - ty) < 16)) continue;
     const r = rnd();
@@ -73,21 +74,28 @@ function buildBackground() {
   trees.sort((a, b) => a.y - b.y).forEach(t => drawSprite(x, 'tree', t.x, t.y, 1.4, rnd() < 0.5, false, t.kind));
   // 花草點綴
   for (let n = 0; n < 160; n++) {
-    const tx = rand(0, W), ty = rand(CFG.MAP_TOP, CFG.MAP_BOTTOM);
+    const tx = rand(0, W), ty = rand(CFG.WTOP, CFG.WBOT);
     if (avoid(tx, ty)) continue;
     x.fillStyle = ['#a7f070', '#ffcd75', '#f4f4f4', '#3b7d2a'][(rnd() * 4) | 0]; x.fillRect(tx | 0, ty | 0, 2, 2);
   }
   R.bg = c;
 }
-// 背景依目前畫布像素大小預先縮放一次，之後每幀 1:1 貼上（省去每幀整張縮放取樣）
-function bgFitted(ctx) {
-  const cw = ctx.canvas.width, ch = ctx.canvas.height;
+// 背景：鏡頭縮放倍率固定時，依「目前裝置像素／世界單位」預先縮放整張背景一次，之後每幀 1:1 貼上（省去每幀整張縮放取樣）；
+// 縮放進行中（雙指／滾輪／鏡頭動畫）或快取會太大時，直接縮放繪製
+function drawBg(ctx) {
+  const m = ctx.getTransform(), sc = m.a, cw = Math.round(CFG.WW * sc), ch = Math.round(CFG.WH * sc);
+  const zooming = Cam.zooming();
+  if (zooming || cw * ch > 8e6) {
+    if (R.bgFit && (R.bgFit.width !== cw || R.bgFit.height !== ch)) R.bgFit = null;   // 釋放舊快取
+    ctx.imageSmoothingEnabled = !zooming && !!R.mapImg;   // 縮放中：最近鄰（較快；停下後換回高品質快取）；快取太大（平板放大）：直接平滑縮放
+    ctx.drawImage(R.bg, 0, 0, CFG.WW, CFG.WH); ctx.imageSmoothingEnabled = false; return;
+  }
   if (!R.bgFit || R.bgFit.width !== cw || R.bgFit.height !== ch) {
     const c = document.createElement('canvas'); c.width = cw; c.height = ch;
-    const x = c.getContext('2d'); x.imageSmoothingEnabled = !!R.mapImg; x.drawImage(R.bg, 0, 0, cw, ch);
+    const x = c.getContext('2d'); x.imageSmoothingEnabled = !!R.mapImg; x.imageSmoothingQuality = 'high'; x.drawImage(R.bg, 0, 0, cw, ch);
     R.bgFit = c;
   }
-  return R.bgFit;
+  ctx.setTransform(1, 0, 0, 1, Math.round(m.e), Math.round(m.f)); ctx.drawImage(R.bgFit, 0, 0); ctx.setTransform(m);
 }
 
 function hpBar(ctx, x, y, w, ratio, col = '#5fd16b') {
@@ -109,12 +117,14 @@ function darkness() {
 
 function renderWorld(ctx) {
   ctx.save();
+  ctx.fillStyle = '#16200f'; ctx.fillRect(0, 0, CFG.W, CFG.H);   // 世界外（捲到邊緣時）
   if (setting('shake')) {   // 輕微畫面震動（設定可關閉）
     if (G.shake > 0) ctx.translate(rand(-2, 2), rand(-2, 2));
     const bsh = Boss.shake(); if (bsh) ctx.translate(rand(-bsh, bsh), rand(-bsh, bsh));
   }
+  Cam.apply(ctx);   // 之後全部以世界座標繪製（直到本函式結尾）
   ctx.imageSmoothingEnabled = false;
-  { const m = ctx.getTransform(), bf = bgFitted(ctx); ctx.setTransform(1, 0, 0, 1, Math.round(m.e), Math.round(m.f)); ctx.drawImage(bf, 0, 0); ctx.setTransform(m); }
+  drawBg(ctx);
   const day = G.phase === 'day';
   // 塔位
   CFG.TOWER_SPOTS.forEach((s, i) => {
@@ -216,7 +226,7 @@ function renderWorld(ctx) {
   HeroAnim.drawRise(ctx);
   // 隕石術：畫面微暗（詠唱到隕石落地）
   { const mz = G.zones.find(z => z.kind === 'meteor'); const vh = G.hero && G.hero.id === 'vera' && G.hero.skillAnim > 0;
-    if (mz || vh) { const k = mz ? 1 - Math.max(0, mz.t) / mz.life * 0.3 : 0.7; ctx.fillStyle = `rgba(20,5,40,${0.2 * k})`; ctx.fillRect(0, CFG.MAP_TOP, CFG.W, CFG.MAP_BOTTOM - CFG.MAP_TOP); } }
+    if (mz || vh) { const k = mz ? 1 - Math.max(0, mz.t) / mz.life * 0.3 : 0.7; ctx.fillStyle = `rgba(20,5,40,${0.2 * k})`; ctx.fillRect(-40, -40, CFG.WW + 80, CFG.WH + 80); } }
 
   // 技能區域
   for (const z of G.zones) {
@@ -261,21 +271,21 @@ function renderWorld(ctx) {
     else if (f.kind === 'pillar') {   // 進化／分支升級：金色光柱
       const a = k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85, w = (f.small ? 14 : 26) * (1 - k * 0.4);
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = `rgba(255,220,120,${0.55 * a})`; ctx.fillRect(f.x - w / 2, CFG.MAP_TOP, w, f.y - CFG.MAP_TOP);
-      ctx.fillStyle = `rgba(255,255,230,${0.75 * a})`; ctx.fillRect(f.x - w / 6, CFG.MAP_TOP, w / 3, f.y - CFG.MAP_TOP);
+      ctx.fillStyle = `rgba(255,220,120,${0.55 * a})`; ctx.fillRect(f.x - w / 2, Cam.y, w, f.y - Cam.y);
+      ctx.fillStyle = `rgba(255,255,230,${0.75 * a})`; ctx.fillRect(f.x - w / 6, Cam.y, w / 3, f.y - Cam.y);
       Light.glow1(ctx, 'gold', f.x, f.y - 6, f.small ? 26 : 46, a, 0.6); ctx.restore(); ctx.globalAlpha = 1;
     }
     else if (f.kind === 'horn') { ctx.strokeStyle = `rgba(255,120,90,${1 - k})`; ctx.lineWidth = 2; for (let i = 0; i < 3; i++) { const r = 10 + ((k + i / 3) % 1) * 46; ctx.beginPath(); ctx.ellipse(f.x, f.y, r, r * 0.6, 0, 0, 7); ctx.stroke(); } }
     else if (f.kind === 'lvl') { ctx.strokeStyle = `rgba(120,200,255,${1 - k})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(f.x, f.y, 8 + k * 18, 4 + k * 9, 0, 0, 7); ctx.stroke(); }
     else if (f.kind === 'mark') { ctx.strokeStyle = `rgba(255,255,255,${1 - k})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(f.x, f.y, 8 + k * 6, 4 + k * 3, 0, 0, 7); ctx.stroke(); }
   }
-  ctx.restore();
 
   renderLighting(ctx);
   renderGlowFx(ctx);
 
   drawDmgNumbers(ctx);
   for (const f of G.fx) if (f.kind === 'text') text(ctx, f.text, f.x, f.y - f.t * 22, 10, f.color, 'center');
+  ctx.restore();
 }
 
 // 英雄動作影格（只影響顯示）：技能 > 攻擊 > 走路（走路/待機交替）> 待機
@@ -303,7 +313,7 @@ R.darkFrame = 0; R.darkKey = '';
 const GLOW_IN_DARK = 2.0;   // 光暈改成畫在夜色層裡（一般混合），稍微加強以接近原本 lighter 疊加的亮度
 function renderLighting(ctx) {
   const a = darkness(); if (a <= 0 || Light.off.dark) return;
-  const d = R.dark, dx = d.getContext('2d'), sx = d.width / CFG.W, sy = d.height / CFG.H;
+  const d = R.dark, dx = d.getContext('2d'), sx = d.width / CFG.WW, sy = d.height / CFG.WH;
   const hole = (c, x, y, r, s) => { c.globalAlpha = Math.min(1, s); c.drawImage(Light.hole, (x - r) * sx, (y - r) * sy, r * 2 * sx, r * 2 * sy); };
   const aq = Math.round(a * 50) / 50;
   const key = `${G.phase === 'dusk'}|${aq}|${G.starving}|${G.beaconT > 0}|${G.post ? G.post.id : ''}|${G.towers.map(t => t.type[0] + t.x + ',' + t.y).join(';')}`;
@@ -343,9 +353,14 @@ function renderLighting(ctx) {
     dx.setTransform(1, 0, 0, 1, 0, 0);
     dx.globalAlpha = 1;
   }
-  // 夜色遮罩：180×320 小畫布以「最近鄰」放大（雙線性放大整張地圖在中階手機上很吃效能；2 邏輯像素一格，與像素風一致）
+  // 夜色遮罩：世界 1/2 解析度的小畫布以「最近鄰」放大（在鏡頭變換下）；只貼目前看得到的部分。世界外的邊緣另外補暗
   ctx.save(); ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(d, 0, CFG.MAP_TOP * sy, d.width, (CFG.MAP_BOTTOM - CFG.MAP_TOP) * sy, 0, CFG.MAP_TOP, CFG.W, CFG.MAP_BOTTOM - CFG.MAP_TOP);
+  const v = Cam.view(4), x0 = Math.max(0, Math.floor(v.x0 * sx)), y0 = Math.max(0, Math.floor(v.y0 * sy)), x1 = Math.min(d.width, Math.ceil(v.x1 * sx)), y1 = Math.min(d.height, Math.ceil(v.y1 * sy));
+  if (x1 > x0 && y1 > y0) ctx.drawImage(d, x0, y0, x1 - x0, y1 - y0, x0 / sx, y0 / sy, (x1 - x0) / sx, (y1 - y0) / sy);
+  if (v.x0 < 0 || v.y0 < 0 || v.x1 > CFG.WW || v.y1 > CFG.WH) {
+    ctx.fillStyle = G.phase === 'dusk' ? `rgba(60,20,50,${aq})` : `rgba(8,10,34,${aq})`; ctx.beginPath();
+    ctx.rect(v.x0, v.y0, v.x1 - v.x0, v.y1 - v.y0); ctx.rect(CFG.WW, 0, -CFG.WW, CFG.WH); ctx.fill('evenodd');
+  }
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   ctx.restore();
 }
@@ -407,9 +422,9 @@ function drawEntryArrows(ctx) {
   const has = k => plan.some(w => w.some(g => g[0] === k));
   for (const p of G.paths || [G.path]) {   // 每條路線的入口：沿著路線第一段的方向
     const [a, b] = [p.pts[0], p.pts[1]], ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
-    const x = clamp(a[0] + Math.cos(ang) * 30, 14, 346), y = clamp(a[1] + Math.sin(ang) * 30, 14, 600);
+    const x = clamp(a[0] + Math.cos(ang) * 30, 14, CFG.WW - 14), y = clamp(a[1] + Math.sin(ang) * 30, 14, CFG.WBOT);
     arrow(x, y, ang, '#ff6b6b', '敵軍入口');
   }
   const side = [has('raider') && '掠奪者', has('arsonist') && '縱火狂', has('sapper') && '地鼠'].filter(Boolean).join('、');
-  if (side) for (const r of CFG.RAIDS || []) { const rt = r.x > 180; arrow(rt ? r.x - 14 : r.x + 14, r.y, rt ? Math.PI : 0, '#ffb070', ''); text(ctx, side, rt ? r.x - 30 : r.x + 30, r.y - 14, 9, '#ffb070', rt ? 'right' : 'left'); }
+  if (side) for (const r of CFG.RAIDS || []) { const rt = r.x > CFG.WW / 2; arrow(rt ? r.x - 14 : r.x + 14, r.y, rt ? Math.PI : 0, '#ffb070', ''); text(ctx, side, rt ? r.x - 30 : r.x + 30, r.y - 14, 9, '#ffb070', rt ? 'right' : 'left'); }
 }

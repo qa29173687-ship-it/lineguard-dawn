@@ -1,6 +1,7 @@
 """第一章：邊境森林 10 關的資料來源 → 產生 js/levels.js（JSON，遊戲與 tools/make_map_bg.py 共用）。
 修改後執行：/workspace/.artenv/bin/python tools/levels_def.py && /workspace/.artenv/bin/python tools/make_map_bg.py all
-座標＝邏輯座標（360×640）；城堡 (180,432)、糧倉 (318,556) 與後方建地各關相同。
+座標＝v10 版面（360×640）的邏輯座標；輸出時統一乘上 WS（v11 世界 450×800，見 js/config.js 的 WS/WW/WH），
+城堡 (180,432)→(225,540)、糧倉 (318,556)→(398,695) 與後方建地各關相同（config.js 內已是放大後座標）。
 paths：敵人路線（1～2 條，最後都到城堡）；pads：塔位；plots：後方建地索引（CFG.PLOTS）
 supply：null = 尚未開放補給線（塔直接吃糧倉的糧）；否則為補給站候選（road = 糧倉→補給站）
 waves：每夜 [[種類, 數量, 間隔秒, 路線(可省略=依組別輪流)]...]
@@ -177,12 +178,27 @@ HP_TUNE = {1: 1.0, 2: 1.1, 3: 1.2, 4: 1.6, 5: 1.8, 6: 2.3, 7: 1.9, 8: 1.8, 9: 1.
 # v9 難度提升（第 4 關起）：HP_TUNE2 全夜倍率 × HP_RAMP 線性坡度（第 1 夜 ×1 → 最後一夜 ×RAMP），前期不至於第一夜就崩、後段夜晚明顯變難
 HP_TUNE2 = {4: 1.36, 10: 0.95}
 HP_RAMP = {4: 1.6, 5: 1.65, 6: 1.34, 7: 1.75, 8: 1.45, 9: 1.8, 10: 1.85}
+# v11 地圖放大後（自動玩家 30 場×3 英雄對照 v10）的微調
+HP_V11 = {6: 0.98, 8: 0.95, 10: 0.98}
 for lv in L:
     n = len(lv['hp']); i0 = lv['id']; r = HP_RAMP.get(i0, 1.0)
-    lv['hp'] = [round(v * HP_TUNE[i0] * HP_TUNE2.get(i0, 1.0) * (1 + (r - 1) * k / max(1, n - 1)), 3) for k, v in enumerate(lv['hp'])]
+    lv['hp'] = [round(v * HP_TUNE[i0] * HP_TUNE2.get(i0, 1.0) * HP_V11.get(i0, 1.0) * (1 + (r - 1) * k / max(1, n - 1)), 3) for k, v in enumerate(lv['hp'])]
     lv.setdefault('cliffs', []); lv.setdefault('river', None); lv.setdefault('bridges', []); lv.setdefault('branches', False); lv.setdefault('beacon', False); lv.setdefault('boss', None); lv.setdefault('valley', False)
     assert len(lv['waves']) == lv['nights'] == len(lv['hp']), lv['id']
     lv['map'] = f"assets/maps/level_{lv['id']:02d}.jpg"
+# v11：世界放大 WS 倍（只放大位置，不放大圖像尺寸 → 版面更寬鬆；距離類數值在 config.js 統一乘上 WS）
+WS = 1.25
+def sp(p): return [int(round(p[0] * WS)), int(round(p[1] * WS))] + list(p[2:])
+def spl(pts): return [sp(p) for p in pts]
+for lv in L:
+    lv['paths'] = [spl(P) for P in lv['paths']]
+    lv['pads'] = spl(lv['pads'])
+    lv['cliffs'] = [spl(c) for c in lv['cliffs']]
+    if lv['river']: lv['river'] = spl(lv['river'])
+    lv['bridges'] = spl(lv['bridges'])
+    lv['raid'] = spl(lv['raid'])
+    if lv['supply']:
+        lv['supply'] = dict(lv['supply'], spots=[dict(s, x=int(round(s['x'] * WS)), y=int(round(s['y'] * WS)), road=spl(s['road'])) for s in lv['supply']['spots']])
 out = '// 自動產生：tools/levels_def.py（請改那邊再重跑）\n// 第一章：邊境森林 10 關\nconst LEVEL_MODS = ' + json.dumps(MODS, ensure_ascii=False) + ';\nconst LEVELS = ' + json.dumps(L, ensure_ascii=False, indent=0).replace('\n', '') + ';\n'
 open(os.path.join(ROOT, 'js', 'levels.js'), 'w', encoding='utf-8').write(out)
 print('levels', len(L), os.path.getsize(os.path.join(ROOT, 'js', 'levels.js')), 'bytes')

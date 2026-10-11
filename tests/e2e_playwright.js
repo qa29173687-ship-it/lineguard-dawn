@@ -25,6 +25,10 @@ const OUT = '/workspace/game-proto/screenshots';
   await page.waitForTimeout(800);
   const box = await (await page.$('#game')).boundingBox();
   const tap = async (x, y) => page.touchscreen.tap(box.x + x / 360 * box.width, box.y + y / 640 * box.height);
+  // v11：點世界座標（v = v10 版面座標 → ×WS；w = 已是世界座標）。目標不在畫面內時先把鏡頭移過去
+  const wtapW = async (x, y) => { const [sx, sy] = await page.evaluate(([x, y]) => { let [a, b] = Cam.w2s(x, y); if (a < 20 || a > 340 || b < 70 || b > 550) { Cam.set(Cam.posFor(x, y, Cam.z)); [a, b] = Cam.w2s(x, y); } return [a, b]; }, [x, y]); await page.waitForTimeout(60); return tap(sx, sy); };
+  const wtap = (x, y) => wtapW(x * 1.25, y * 1.25);
+  const tapId = async id => { const b = await page.evaluate(id => UI.buttons.find(b => b.id === id), id); if (b) await tap(b.x + b.w / 2, b.y + b.h / 2); return !!b; };
   const st = () => page.evaluate(() => __game.state());
   const log = async (l) => { const s = await st(); console.log(l, JSON.stringify({ screen: s.screen, phase: s.phase, night: s.night, hp: s.castleHp, en: s.enemies, pend: s.pending, types: s.types, towers: s.towers, kills: s.kills, end: s.end, wagon: s.wagon, starving: s.starving, res: s.res && Object.fromEntries(Object.entries(s.res).map(([k,v])=>[k,Math.floor(v)])) })); return s; };
   const waitFor = async (fn, ms, label) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await page.evaluate(fn)) return true; await page.waitForTimeout(200); } console.log('TIMEOUT', label); return false; };
@@ -44,11 +48,11 @@ const OUT = '/workspace/game-proto/screenshots';
   let s = await log('after start');
   console.log('hero', await page.evaluate(() => G.hero.id));
   // 實際點擊建造：地塊0 → 農田
-  await tap(30, 486); await page.waitForTimeout(150);
-  await tap(37, 425); await page.waitForTimeout(150);
+  await wtap(30, 486); await page.waitForTimeout(150);
+  await tapId('opt0'); await page.waitForTimeout(150);
   console.log('buildings', await page.evaluate(() => G.buildings.map(b => b.type)));
   // 實際點擊建塔：塔位1 → 弓箭塔
-  await tap(240, 66); await page.waitForTimeout(150);
+  await wtap(240, 66 - 10); await page.waitForTimeout(150);
   const ob = await page.evaluate(() => UI.buttons.find(b => b.id === 'opt0'));
   await tap(ob.x + ob.w / 2, ob.y + ob.h / 2); await page.waitForTimeout(150);
   await tap(ob.x + ob.w / 2, ob.y + ob.h / 2); await page.waitForTimeout(150); // 第二下確認建造
@@ -56,10 +60,10 @@ const OUT = '/workspace/game-proto/screenshots';
   await page.evaluate(() => { __game.give(400, 300, 60); __game.place(1, 'lumber'); __game.place(2, 'quarry'); __game.place(3, 'house'); __game.place(5, 'farm'); __game.place(4, 'lumber');
     __game.build(3, 'barracks'); __game.build(6, 'mage'); __game.build(8, 'cannon'); __game.build(5, 'archer'); });
   // 移動英雄
-  await tap(200, 230);
+  await wtap(200, 230);
   await page.evaluate(() => __game.speed(4)); await page.waitForTimeout(2500); await page.evaluate(() => __game.speed(1));
   // 打開一個建造選單給截圖看
-  await tap(130, 548); await page.waitForTimeout(400);
+  await wtap(130, 548); await page.waitForTimeout(400);
   await page.screenshot({ path: `${OUT}/2_day_building.png` });
   await log('day');
   await tap(300, 300); // 關閉選單
@@ -71,8 +75,8 @@ const OUT = '/workspace/game-proto/screenshots';
   await page.evaluate(() => __game.speed(1));
   // 施放技能
   await tap(316, 610); await page.waitForTimeout(100);
-  const tgt = await page.evaluate(() => { const e = G.enemies[0]; return e ? [e.x, e.y] : [180, 200]; });
-  await tap(tgt[0], tgt[1]); await page.waitForTimeout(700);
+  const tgt = await page.evaluate(() => { const e = G.enemies[0]; return e ? [e.x, e.y] : [225, 250]; });
+  await wtapW(tgt[0], tgt[1]); await page.waitForTimeout(700);
   await log('night battle');
   await page.screenshot({ path: `${OUT}/3_night_battle.png` });
   await perf('night1 normal');

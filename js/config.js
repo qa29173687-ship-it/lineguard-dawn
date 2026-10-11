@@ -17,7 +17,9 @@ const LS = (() => {
 const FONT = '"Noto Sans TC","Noto Sans CJK TC","PingFang TC","Microsoft JhengHei",sans-serif';
 
 const CFG = {
-  W: 360, H: 640, MAP_TOP: 40, MAP_BOTTOM: 580,
+  W: 360, H: 640, MAP_TOP: 40, MAP_BOTTOM: 580,   // 畫面（邏輯解析度）與上下 HUD 之間的地圖可視區
+  // v11 世界（可捲動、縮放的地圖）：關卡座標 = v10 版面 × WS；WTOP～WBOT = 地圖內容範圍（英雄可走動）
+  WS: 1.25, WW: 450, WH: 800, WTOP: 50, WBOT: 725,
   // 選用整張地圖背景（以 360×640 比例拉滿整個畫布；建議 720×1280，參考 tools/layout_guide.png）
   // null = 使用程序產生的地面與樹木。每關的背景圖由 tools/make_map_bg.py 產生（assets/maps/level_XX.jpg）
   MAP_BG: 'assets/maps/level_01.jpg',   // 每關換成 LEVELS[i].map   // 由 tools/make_map_bg.py 依本設定合成；null = 程序產生背景
@@ -39,22 +41,22 @@ const CFG = {
   HERO_RESPAWN: 10,
 
   // 敵人行進路線（上方森林 → 城堡）
-  PATH: [[180, 40], [180, 90], [60, 90], [60, 190], [290, 190], [290, 290], [110, 290], [110, 370], [180, 370], [180, 412]],
-  CASTLE: { x: 180, y: 432 },
-  GRANARY: { x: 318, y: 556 },
-  DEPOT: { x: 342, y: 236 },
+  PATH: [[225, 50], [225, 112], [75, 112], [75, 238], [362, 238], [362, 362], [138, 362], [138, 462], [225, 462], [225, 515]],
+  CASTLE: { x: 225, y: 540 },
+  GRANARY: { x: 398, y: 695 },
+  DEPOT: { x: 428, y: 295 },
   // 補給道路：糧倉 → 前線補給站
-  ROAD: [[334, 548], [342, 548], [342, 240]],
-  RAIDER_SPAWN: { x: -14, y: 448 },
+  ROAD: [[418, 685], [428, 685], [428, 300]],
+  RAIDER_SPAWN: { x: -18, y: 560 },
   // 補給站候選位置（開局選一個；白天可花資源遷移）。road = 糧倉→補給站的道路；risk = 每晚額外掠奪者數量（第 1 夜減 1）
   // 防禦塔只有在補給站 SUPPLY_RADIUS 範圍內才領得到前線糧；範圍外的塔夜晚一律算缺糧
   SUPPLY_RADIUS: 235, SUPPLY_MOVE_COST: { wood: 40 },
   SUPPLY_SPOTS: [
-    { id: 'rear',  name: '城後糧站', x: 316, y: 444, road: [[334, 548], [342, 548], [342, 444], [322, 444]], risk: 0,
+    { id: 'rear',  name: '城後糧站', x: 395, y: 555, road: [[418, 685], [428, 685], [428, 555], [402, 555]], risk: 0,
       desc: '離糧倉近、運送快，但只能補給後半段的塔' },
-    { id: 'east',  name: '東崖補給站', x: 342, y: 236, road: [[334, 548], [342, 548], [342, 240]], risk: 1,
+    { id: 'east',  name: '東崖補給站', x: 428, y: 295, road: [[418, 685], [428, 685], [428, 300]], risk: 1,
       desc: '均衡：覆蓋中段與右側，左側塔位補不到' },
-    { id: 'front', name: '前線中樞', x: 196, y: 226, road: [[334, 548], [342, 548], [342, 226], [204, 226]], risk: 2,
+    { id: 'front', name: '前線中樞', x: 245, y: 282, road: [[418, 685], [428, 685], [428, 282], [255, 282]], risk: 2,
       desc: '覆蓋全部塔位，但路途遙遠、掠奪者更多' },
   ],
   // 烽火：每夜一次，所有塔攻速提升，消耗大量前線糧
@@ -62,10 +64,10 @@ const CFG = {
   // 魔法傷害對重甲的倍率；盾兵正面物理減傷
   MAGIC_VS_HEAVY: 1.5,
 
-  TOWER_SPOTS: [[120, 62], [240, 66], [110, 146], [180, 146], [245, 146], [150, 246], [230, 246], [60, 252],
-                [170, 336], [245, 336], [60, 348], [250, 404]],
-  PLOTS: [[30, 486], [80, 486], [130, 486], [230, 486], [280, 486],
-          [30, 548], [80, 548], [130, 548], [180, 548], [230, 548], [272, 548]],
+  TOWER_SPOTS: [[150, 78], [300, 82], [138, 182], [225, 182], [306, 182], [188, 308], [288, 308], [75, 315],
+                [212, 420], [306, 420], [75, 435], [312, 505]],
+  PLOTS: [[38, 608], [100, 608], [162, 608], [288, 608], [350, 608],
+          [38, 685], [100, 685], [162, 685], [225, 685], [288, 685], [340, 685]],
 
   WAGON: { cap: 20, speed: 38, minLoad: 4 },
 
@@ -227,3 +229,14 @@ const CFG = {
 
   PITY_STREAK: 2, PITY_BONUS: { wood: 30, stone: 20 },
 };
+
+// v11：世界放大 WS 倍（座標已直接寫成放大後的值）；距離類數值在這裡統一乘上 WS，讓行進時間、射程覆蓋與 v10 相同
+(function scaleWorld(k) {
+  const r = v => Math.round(v * k * 10) / 10;
+  for (const e of Object.values(CFG.ENEMIES)) e.speed = r(e.speed);
+  for (const h of Object.values(CFG.HEROES)) { h.speed = r(h.speed); if (!h.melee) h.range = r(h.range); if (h.auraR) h.auraR = r(h.auraR); }
+  for (const t of Object.values(CFG.TOWERS)) { t.range = t.range.map(r); if (t.splash) t.splash = r(t.splash); }
+  for (const b of Object.values(CFG.BRANCHES)) { b.range = r(b.range); if (b.splash) b.splash = r(b.splash); }
+  CFG.VILLAGER_SPEED = r(CFG.VILLAGER_SPEED); CFG.WAGON.speed = r(CFG.WAGON.speed);
+  CFG.SUPPLY_RADIUS = Math.round(CFG.SUPPLY_RADIUS * k); CFG.HERO_XP_NEAR = r(CFG.HERO_XP_NEAR);
+})(CFG.WS);

@@ -163,7 +163,7 @@ function costText(cost) { const n = { wood: '木', stone: '石', food: '糧' }; 
 function floatText(x, y, text, color = '#fff', life = 1.0) { G.fx.push({ kind: 'text', x, y, text, color, t: 0, life }); }
 function banner(text, sub = '', life = 2.4) { G.fx = G.fx.filter(f => f.kind !== 'banner'); G.fx.push({ kind: 'banner', text, sub, t: 0, life }); }
 function boom(x, y, r, color, life = 0.4) { G.fx.push({ kind: 'boom', x, y, r, color, t: 0, life }); }
-function toast(text) { floatText(G.W / 2 || 180, 300, text, '#ffd166', 1.4); }
+function toast(text) { const [x, y] = typeof Cam !== 'undefined' ? Cam.s2w(CFG.W / 2, 300) : [CFG.WW / 2, 375]; floatText(x, y, text, '#ffd166', 1.4); }
 
 // ---------- 開局 ----------
 function newRun(heroId, blessingId) {
@@ -197,6 +197,7 @@ function newRun(heroId, blessingId) {
   writeSave();
   if (!G.lv.supply) banner(`第 ${G.levelId} 關・${G.lv.name}`, G.lv.tips[0], 3);
   qolNewRun();
+  Cam.reset(G.choosingSupply === true);   // 選補給站：先看整張地圖；否則從預設視角開始
   if (talent('h2')) { G.hero.xp = CFG.HERO_XP[2]; heroLevelCheck(true); }
 }
 // ---------- 補給站 ----------
@@ -219,7 +220,7 @@ function confirmSupply() {
     pay(c);
   }
   setPost(G.supplyPick); G.choosingSupply = false; sfx('build');
-  if (first) banner(`第 ${G.levelId} 關・${G.lv.name}`, G.lv.tips[0], 3);
+  if (first) { banner(`第 ${G.levelId} 關・${G.lv.name}`, G.lv.tips[0], 3); Cam.moveTo(Cam.home(), 0.6); }
   else banner('補給站已遷移', G.post.name, 1.6);
 }
 function spotSupplied(x, y) { return !G.post || Math.hypot(x - G.post.x, y - G.post.y) <= CFG.SUPPLY_RADIUS; }
@@ -421,7 +422,7 @@ function soldierMax(t) {
 function towerRange(t) {
   let r = tStat(t, 'range');
   const h = G.hero;
-  if (t.type === 'archer' && h && h.id === 'erin' && !h.dead && dist(h, t) < 120) r *= 1.15;
+  if (t.type === 'archer' && h && h.id === 'erin' && !h.dead && dist(h, t) < 120 * CFG.WS) r *= 1.15;
   if (talent('d3')) r *= 1.08;
   return r;
 }
@@ -545,8 +546,8 @@ function spawnEnemy(type, lane = 0) {
   bestiarySeen(type);
   if (offPath(e)) {
     const r = raidPoint(); e.home = r; e.x = r.x; e.y = r.y + rand(-14, 14);
-    floatText(clamp(e.x, 30, 330), e.y - 20, d.raider ? '掠奪者！' : d.arsonist ? '縱火狂！' : '', '#ff6b6b');
-    if (d.sapper) { e.under = true; e.x = clamp(r.x, 8, 352); e.dig = 0; }
+    floatText(clamp(e.x, 30, CFG.WW - 30), e.y - 20, d.raider ? '掠奪者！' : d.arsonist ? '縱火狂！' : '', '#ff6b6b');
+    if (d.sapper) { e.under = true; e.x = clamp(r.x, 8, CFG.WW - 8); e.dig = 0; }
   }
   else { const p = pathAt(e.path, 0); e.x = p.x + e.ox; e.y = p.y + e.oy; }
   if (d.boss) { e.ox = 0; e.oy = 0; e.hornIdx = 0; e.hornT = 0; G.boss = e; if (typeof Boss !== 'undefined') Boss.start(e); vibe([80, 50, 160], true); }
@@ -558,7 +559,7 @@ function bossHorn(e) {
   e.hornT = 1.4; G.shake = 0.5; sfx('boss_roar'); vibe([60, 40, 60]);
   G.fx.push({ kind: 'horn', x: e.x, y: e.y - 30, t: 0, life: 1.2 });
   banner('格魯姆吹響戰號！', `${e.d.hornRaiders} 名掠奪者衝向補給線`, 1.8);
-  for (let i = 0; i < e.d.hornRaiders; i++) { const r = spawnEnemy('raider'); r.x += (r.x < 180 ? -1 : 1) * i * 14; }
+  for (let i = 0; i < e.d.hornRaiders; i++) { const r = spawnEnemy('raider'); r.x += (r.x < CFG.WW / 2 ? -1 : 1) * i * 14; }
 }
 // 盾兵正面：攻擊來源在敵人前進方向的前方
 function fromFront(e, from) {
@@ -651,7 +652,7 @@ function updateEnemies(dt) {
 function updateRaider(e, dt) {
   if (enemyFight(e, dt)) return;
   let tx, ty;
-  const fleeX = e.home && e.home.x > 180 ? 400 : -40;
+  const fleeX = e.home && e.home.x > CFG.WW / 2 ? CFG.WW + 40 : -40;
   if (e.mode === 'flee') { tx = fleeX; ty = e.y; }
   else {
     const w = G.wagon;
@@ -667,13 +668,13 @@ function updateRaider(e, dt) {
     else { take = Math.min(15, Math.floor(G.res.food)); G.res.food -= take; floatText(e.x, e.y - 24, '糧倉被搶！', '#ff6b6b'); }
     e.carry = take; G.stats.stolen += take; e.mode = 'flee';
   }
-  if (e.mode === 'flee' && (e.x < -30 || e.x > 390)) e.remove = true;
+  if (e.mode === 'flee' && (e.x < -30 || e.x > CFG.WW + 30)) e.remove = true;
 }
 // 縱火狂：燒毀後方建築（農田、伐木場…）與糧倉；燒完 2 處後逃走。被燒的建築停止生產，點一下花木頭修復
 function updateArsonist(e, dt) {
   if (enemyFight(e, dt)) return;
-  const fleeX = e.home && e.home.x > 180 ? 400 : -40;
-  if (e.mode === 'flee' || (e.burns || 0) >= 2) { e.mode = 'flee'; moveToward(e, fleeX, e.y, e.d.speed * 1.15 * dt); if (e.x < -30 || e.x > 390) e.remove = true; return; }
+  const fleeX = e.home && e.home.x > CFG.WW / 2 ? CFG.WW + 40 : -40;
+  if (e.mode === 'flee' || (e.burns || 0) >= 2) { e.mode = 'flee'; moveToward(e, fleeX, e.y, e.d.speed * 1.15 * dt); if (e.x < -30 || e.x > CFG.WW + 30) e.remove = true; return; }
   if (!e.tgt || e.tgt.burned || e.tgt.removed) {
     let best = null, bd = 1e9;
     for (const b of G.buildings) { if (b.burned) continue; const d = Math.hypot(b.x - e.x, b.y - e.y); if (d < bd) { bd = d; best = b; } }
@@ -705,7 +706,7 @@ function repairBuilding(b) {
 function updateSapper(e, dt) {
   if (!G.road) { e.remove = true; return; }
   if (!e.goal) { const d = G.road.total * rand(0.3, 0.8), p = pathAt(G.road, d); e.goal = { x: p.x, y: p.y, d }; }
-  if (e.mode === 'leave') { e.under = true; moveToward(e, e.home.x > 180 ? 400 : -40, e.y, e.d.speed * 1.3 * dt); if (e.x < -30 || e.x > 390) e.remove = true; return; }
+  if (e.mode === 'leave') { e.under = true; moveToward(e, e.home.x > CFG.WW / 2 ? CFG.WW + 40 : -40, e.y, e.d.speed * 1.3 * dt); if (e.x < -30 || e.x > CFG.WW + 30) e.remove = true; return; }
   if (e.under) {
     if (moveToward(e, e.goal.x, e.goal.y, e.d.speed * dt)) { e.under = false; e.dig = 0; boom(e.x, e.y, 14, 'rgba(160,120,70,0.9)', 0.4); floatText(e.x, e.y - 24, '地鼠鑽出來了！', '#ffb070'); sfx('bones', { pitch: 0.7 }); }
     if (Math.random() < dt * 8) G.fx.push({ kind: 'dirt', x: e.x + rand(-4, 4), y: e.y + rand(-2, 2), t: 0, life: 0.6 });
@@ -725,7 +726,7 @@ function pickTarget(x, y, range, air) {
   for (const e of G.enemies) {
     if (!live(e) || e.under || (e.d.flying && !air)) continue;
     if (Math.hypot(e.x - x, e.y - y) > range) continue;
-    const prog = offPath(e) ? 600 : e.dist;   // 掠奪者、縱火狂、地鼠優先
+    const prog = offPath(e) ? 600 * CFG.WS : e.dist;   // 掠奪者、縱火狂、地鼠優先
     if (prog > bp) { bp = prog; best = e; }
   }
   return best;
@@ -763,10 +764,10 @@ function updateTowers(dt) {
     const dmg = tStat(t, 'dmg') * G.mods.towerDmg * lenaAura(t);
     const sx = t.x, sy = t.y - 30, from = { x: t.x, y: t.y };
     const kind = t.br || t.type;
-    if (kind === 'archer' || kind === 'ranger') { G.projectiles.push({ kind: 'arrow', x: sx, y: sy, target: e, tx: e.x, ty: e.y, speed: 320, dmg, type: 'phys', from, poison: t.br === 'ranger' ? t.bdef.poison : null }); sfx('arrow_shoot'); }
-    else if (kind === 'musket') { G.projectiles.push({ kind: 'bullet', x: sx, y: sy, target: e, tx: e.x, ty: e.y, speed: 700, dmg, type: 'phys', from }); sfx('musket'); G.fx.push({ kind: 'boom', x: sx + Math.sign(e.x - sx) * 8, y: sy, r: 6, color: 'rgba(255,230,150,0.9)', t: 0, life: 0.12 }); }
+    if (kind === 'archer' || kind === 'ranger') { G.projectiles.push({ kind: 'arrow', x: sx, y: sy, target: e, tx: e.x, ty: e.y, speed: 320 * CFG.WS, dmg, type: 'phys', from, poison: t.br === 'ranger' ? t.bdef.poison : null }); sfx('arrow_shoot'); }
+    else if (kind === 'musket') { G.projectiles.push({ kind: 'bullet', x: sx, y: sy, target: e, tx: e.x, ty: e.y, speed: 700 * CFG.WS, dmg, type: 'phys', from }); sfx('musket'); G.fx.push({ kind: 'boom', x: sx + Math.sign(e.x - sx) * 8, y: sy, r: 6, color: 'rgba(255,230,150,0.9)', t: 0, life: 0.12 }); }
     else if (kind === 'mage' || kind === 'arcane' || kind === 'necro') {
-      G.projectiles.push({ kind: 'bolt', x: sx, y: sy - 4, target: e, tx: e.x, ty: e.y, speed: 220, dmg, type: 'magic', from, chain: G.heroId === 'vera' && Math.random() < 0.3,
+      G.projectiles.push({ kind: 'bolt', x: sx, y: sy - 4, target: e, tx: e.x, ty: e.y, speed: 220 * CFG.WS, dmg, type: 'magic', from, chain: G.heroId === 'vera' && Math.random() < 0.3,
                            kill: t.br === 'arcane' ? t.bdef.instakill : 0, necro: t.br === 'necro' ? t : null, col: t.br === 'necro' ? 'green' : t.br === 'arcane' ? 'arcane' : null });
       sfx('magic_cast');
     } else if (kind === 'tesla') {
@@ -775,7 +776,7 @@ function updateTowers(dt) {
       for (let i = 0; i < t.bdef.chain && cur; i++) {
         hit.add(cur); G.fx.push({ kind: 'zap', x1: px, y1: py, x2: cur.x, y2: cur.y - 7, t: 0, life: 0.22, big: true });
         hurt(cur, d, 'magic', 'tower', from); px = cur.x; py = cur.y - 7; d *= 0.8;
-        let nx = null, nd = 60;
+        let nx = null, nd = 60 * CFG.WS;
         for (const o of G.enemies) { if (!live(o) || hit.has(o) || o.d.flying) continue; const dd = Math.hypot(o.x - px, o.y - py); if (dd < nd) { nd = dd; nx = o; } }
         cur = nx;
       }
@@ -815,7 +816,7 @@ function updateProjectiles(dt) {
         if (p.poison && live(tg)) { const fresh = !tg.poison; tg.poison = { dps: p.poison.dps, t: p.poison.t, src: p.src }; if (fresh) sfx('poison'); }
         if (p.necro && !live(tg) && p.necro.bdef) summonSkeleton(p.necro);
         if (p.chain && live(tg)) {
-          const o = G.enemies.find(o => live(o) && o !== tg && !o.d.flying && Math.hypot(o.x - tg.x, o.y - tg.y) < 55);
+          const o = G.enemies.find(o => live(o) && o !== tg && !o.d.flying && Math.hypot(o.x - tg.x, o.y - tg.y) < 55 * CFG.WS);
           if (o) { hurt(o, p.dmg * 0.6, 'magic'); G.fx.push({ kind: 'zap', x1: tg.x, y1: tg.y - 7, x2: o.x, y2: o.y - 7, t: 0, life: 0.2 }); }
         }
       }
@@ -849,7 +850,7 @@ function updateSoldiers(dt) {
     }
     if (s.target) {
       const e = s.target;
-      if (Math.hypot(e.x - s.x, e.y - s.y) > 12) moveToward(s, e.x - (e.x > s.x ? 9 : -9), e.y, 62 * dt);
+      if (Math.hypot(e.x - s.x, e.y - s.y) > 12) moveToward(s, e.x - (e.x > s.x ? 9 : -9), e.y, 62 * CFG.WS * dt);
       else {
         s.face = e.x > s.x ? 1 : -1;
         s.atkT -= dt;
@@ -870,7 +871,7 @@ function updateSoldiers(dt) {
 function moveHero(x, y) {
   const h = G.hero; if (h.dead) { toast('英雄復活中…'); return; }
   if (h.charge) return;
-  h.hx = clamp(x, 10, 350); h.hy = clamp(y, CFG.MAP_TOP + 14, CFG.MAP_BOTTOM - 4); h.moving = true;
+  h.hx = clamp(x, 10, CFG.WW - 10); h.hy = clamp(y, CFG.WTOP + 14, CFG.WBOT - 4); h.moving = true;
   releaseBy(h); h.blocked = [];
   G.fx.push({ kind: 'mark', x: h.hx, y: h.hy, t: 0, life: 0.5 });
 }
@@ -880,24 +881,24 @@ function castSkill(x, y) {
   h.cd = skillCd(h); h.skillAnim = 0.6; if (G.qol) G.qol.skillUsed = true;
   h.face = x >= h.x ? 1 : -1;
   sfx('skill_' + h.id);
-  if (h.id === 'erin') G.zones.push(h.evo ? { kind: 'rain', x, y, r: 70, t: 3.5, acc: 0, evo: true } : { kind: 'rain', x, y, r: 50, t: 3, acc: 0 });
+  if (h.id === 'erin') G.zones.push(h.evo ? { kind: 'rain', x, y, r: 70 * CFG.WS, t: 3.5, acc: 0, evo: true } : { kind: 'rain', x, y, r: 50 * CFG.WS, t: 3, acc: 0 });
   else if (h.id === 'vera') {
-    if (h.evo) for (const [ox, oy, d] of [[0, 0, 0.7], [-36, 22, 0.9], [36, 22, 1.1]]) G.zones.push({ kind: 'meteor', x: x + ox, y: y + oy, r: 50, t: d, life: d, evo: true });
-    else G.zones.push({ kind: 'meteor', x, y, r: 54, t: 0.7, life: 0.7 });
+    if (h.evo) for (const [ox, oy, d] of [[0, 0, 0.7], [-36, 22, 0.9], [36, 22, 1.1]]) G.zones.push({ kind: 'meteor', x: x + ox * CFG.WS, y: y + oy * CFG.WS, r: 50 * CFG.WS, t: d, life: d, evo: true });
+    else G.zones.push({ kind: 'meteor', x, y, r: 54 * CFG.WS, t: 0.7, life: 0.7 });
   }
   else if (h.id === 'lena') { releaseBy(h); h.blocked = []; h.charge = { x, y }; h.inv = h.evo ? 5.5 : 3.5; h.moving = false; }
   return true;
 }
 function chargeImpact() {
   const h = G.hero; h.hx = h.x; h.hy = h.y;
-  const R = h.evo ? 56 : 46; G.shake = Math.max(G.shake, 0.15); vibe(30);
+  const R = (h.evo ? 56 : 46) * CFG.WS; G.shake = Math.max(G.shake, 0.15); vibe(30);
   boom(h.x, h.y, R, 'rgba(255,240,150,0.9)', 0.45); sfx('explosion', { pitch: 1.3, vol: 0.6 });
   for (const e of G.enemies) {
     if (!live(e) || Math.hypot(e.x - h.x, e.y - h.y) > R) continue;
     hurt(e, (h.d.chargeDmg || 35) * skillMul(), 'phys', 'hero', h);
-    if (live(e) && !e.d.flying && !offPath(e) && !e.d.boss) { e.dist = Math.max(0, e.dist - 36); e.blocker = null; }
+    if (live(e) && !e.d.flying && !offPath(e) && !e.d.boss) { e.dist = Math.max(0, e.dist - 36 * CFG.WS); e.blocker = null; }
   }
-  for (const s of G.soldiers) if (live(s) && dist(s, h) < 80) { s.inv = h.evo ? 5 : 3; if (h.evo) s.hp = s.max; }
+  for (const s of G.soldiers) if (live(s) && dist(s, h) < 80 * CFG.WS) { s.inv = h.evo ? 5 : 3; if (h.evo) s.hp = s.max; }
   if (!h.evo && h.d.chargeHeal) { h.hp = Math.min(h.max, h.hp + h.max * h.d.chargeHeal); floatText(h.x, h.y - 34, '聖光守護', '#fff2a8'); }
   if (h.evo) { h.hp = Math.min(h.max, h.hp + h.max * 0.4); floatText(h.x, h.y - 34, '聖光治療', '#fff2a8'); G.fx.push({ kind: 'pillar', x: h.x, y: h.y, t: 0, life: 0.8, small: true }); }
 }
@@ -909,11 +910,11 @@ function updateHero(dt) {
     return;
   }
   h.tgtVis = null;   // 只給畫面用（預備動作）：目前攻擊目標
-  if (h.charge) { if (moveToward(h, h.charge.x, h.charge.y, 280 * dt)) { h.charge = null; chargeImpact(); } return; }
+  if (h.charge) { if (moveToward(h, h.charge.x, h.charge.y, 280 * CFG.WS * dt)) { h.charge = null; chargeImpact(); } return; }
   if (h.moving) { if (moveToward(h, h.hx, h.hy, h.d.speed * dt)) h.moving = false; return; }
   h.blocked = h.blocked.filter(e => live(e) && e.blocker === h);
   while (h.blocked.length < h.d.maxBlock) {
-    const e = G.enemies.find(e => live(e) && !e.under && !e.d.flying && !e.blocker && Math.hypot(e.x - h.x, e.y - h.y) < 38);
+    const e = G.enemies.find(e => live(e) && !e.under && !e.d.flying && !e.blocker && Math.hypot(e.x - h.x, e.y - h.y) < 38 * CFG.WS);
     if (!e) break; e.blocker = h; h.blocked.push(e);
   }
   let tgt = h.blocked[0];
@@ -929,7 +930,7 @@ function updateHero(dt) {
     h.atkT = h.d.rate; h.atkAnim = 0.22; h.face = tgt.x > h.x ? 1 : -1;
     sfx(h.id + '_atk');
     if (h.d.melee) { hurt(tgt, heroDmg(h), 'phys', 'hero', h); boom(tgt.x, tgt.y - 8, 6, 'rgba(255,255,200,0.9)', 0.15); }
-    else G.projectiles.push({ kind: h.d.proj, x: h.x, y: h.y - 14, target: tgt, tx: tgt.x, ty: tgt.y, speed: h.d.proj === 'bolt' ? 240 : 340, dmg: heroDmg(h), type: h.d.dmgType, src: 'hero', from: { x: h.x, y: h.y } });
+    else G.projectiles.push({ kind: h.d.proj, x: h.x, y: h.y - 14, target: tgt, tx: tgt.x, ty: tgt.y, speed: (h.d.proj === 'bolt' ? 240 : 340) * CFG.WS, dmg: heroDmg(h), type: h.d.dmgType, src: 'hero', from: { x: h.x, y: h.y } });
   }
   if (G.time - h.lastHit > 3) h.hp = Math.min(h.max, h.hp + h.max * 0.04 * dt);
   else if (h.d.regen) h.hp = Math.min(h.max, h.hp + h.max * h.d.regen * dt);   // 蕾娜：戰鬥中也緩慢回復
@@ -949,7 +950,7 @@ function updateZones(dt) {
     } else if (z.kind === 'meteor' && z.t <= 0) {
       boom(z.x, z.y, z.r, 'rgba(255,120,40,0.95)', 0.6); G.shake = 0.35; sfx('explosion');
       for (const e of G.enemies) if (live(e) && Math.hypot(e.x - z.x, e.y - z.y) <= z.r) hurt(e, 75 * skillMul(), 'magic', 'hero');
-      G.zones.push({ kind: 'burn', x: z.x, y: z.y, r: 42, t: 4, acc: 0, life: 4 });
+      G.zones.push({ kind: 'burn', x: z.x, y: z.y, r: 42 * CFG.WS, t: 4, acc: 0, life: 4 });
     } else if (z.kind === 'burn') {
       z.acc += dt;
       if (z.acc >= 0.5) { z.acc -= 0.5; for (const e of G.enemies) if (live(e) && !e.d.flying && Math.hypot(e.x - z.x, e.y - z.y) <= z.r) hurt(e, 6 * skillMul(), 'magic', 'hero'); }

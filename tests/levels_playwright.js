@@ -19,6 +19,9 @@ const results = []; const ok = (name, cond, extra) => { results.push([name, !!co
   await page.waitForFunction(() => Art.loaded + Art.failed.length >= Art.total, null, { timeout: 20000 });
   const box = await (await page.$('#game')).boundingBox();
   const tap = async (x, y) => { await page.touchscreen.tap(box.x + x / 360 * box.width, box.y + y / 640 * box.height); await page.waitForTimeout(120); };
+  // v11：點世界座標（wtap = v10 版面座標 ×WS；wtapW = 世界座標）。先等鏡頭動畫結束；目標不在畫面內時先把鏡頭移過去
+  const wtapW = async (x, y) => { await page.waitForFunction(() => !Cam.anim, null, { timeout: 3000 }).catch(() => {}); const [sx, sy] = await page.evaluate(([x, y]) => { let [a, b] = Cam.w2s(x, y); if (a < 20 || a > 340 || b < 70 || b > 550) { Cam.set(Cam.posFor(x, y, Cam.z)); [a, b] = Cam.w2s(x, y); } return [a, b]; }, [x, y]); await page.waitForTimeout(60); return tap(sx, sy); };
+  const wtap = (x, y) => wtapW(x * 1.25, y * 1.25);
   const ev = (f, a) => page.evaluate(f, a);
   const tapId = async id => { const b = await ev(id => UI.buttons.find(b => b.id === id), id); if (!b) return false; await tap(b.x + b.w / 2, b.y + b.h / 2); return true; };
   const shot = async n => { if (SHOTS) await page.screenshot({ path: `${OUT}/${n}` }); };
@@ -30,7 +33,7 @@ const results = []; const ok = (name, cond, extra) => { results.push([name, !!co
       if (G.phase === 'dawn' && G.dawnChoices) chooseDawn(0);
       if (G.choosingSupply) G.choosingSupply = false;
       if (strong) { const h = G.hero; if (h && !h.dead && G.enemies.length) { const e = G.enemies.find(e => !e.under) || G.enemies[0]; h.hx = e.x; h.hy = e.y + 12; h.moving = true; } }
-      else if (G.hero) { G.hero.hx = 20; G.hero.hy = 570; G.hero.moving = true; }
+      else if (G.hero) { G.hero.hx = 20; G.hero.hy = CFG.WBOT - 10; G.hero.moving = true; }
     }
     G.speed = 1; return { screen: G.screen, end: G.end, t: Math.round(t) };
   }, strong);
@@ -58,7 +61,7 @@ const results = []; const ok = (name, cond, extra) => { results.push([name, !!co
   const l1 = await ev(() => ({ scr: G.screen, lv: G.levelId, hero: G.hero.id, nights: CFG.NIGHTS, supply: !!G.post, cs: G.choosingSupply, towers: G.lv.towers, map: CFG.MAP_BG }));
   ok('level 1 starts: 2 nights, archer only, no supply line', l1.scr === 'play' && l1.lv === 1 && l1.hero === 'vera' && l1.nights === 2 && !l1.supply && !l1.cs && l1.towers.join() === 'archer', l1);
   // 塔選單只列出開放的塔
-  await ev(() => { G.fx = []; }); await tap(130, 162);   // 第 1 關塔位 0
+  await ev(() => { G.fx = []; }); await wtap(130, 162);   // 第 1 關塔位 0
   ok('tower menu lists only unlocked towers (archer)', await ev(() => G.menu && G.menu.kind === 'spot' && UI.buttons.filter(b => /^opt/.test(b.id)).length === 1));
   ok('cannot build locked tower type', await ev(() => buildTower(1, 'mage') === false && buildTower(1, 'barracks') === false));
   await ev(() => { G.menu = null; });

@@ -26,6 +26,8 @@ const results = []; const ok = (name, cond, extra) => { results.push([name, !!co
   await fresh();
   const box = await (await page.$('#game')).boundingBox();
   const tap = async (x, y) => { await page.touchscreen.tap(box.x + x / 360 * box.width, box.y + y / 640 * box.height); await page.waitForTimeout(120); };
+  // v11：點世界座標（先等鏡頭動畫結束；目標不在畫面內時先把鏡頭移過去）
+  const wtapW = async (x, y) => { await page.waitForFunction(() => !Cam.anim, null, { timeout: 3000 }).catch(() => {}); const [sx, sy] = await page.evaluate(([x, y]) => { let [a, b] = Cam.w2s(x, y); if (a < 20 || a > 340 || b < 70 || b > 550) { Cam.set(Cam.posFor(x, y, Cam.z)); [a, b] = Cam.w2s(x, y); } return [a, b]; }, [x, y]); await page.waitForTimeout(60); return tap(sx, sy); };
   const tapId = async id => { const b = await ev(id => UI.buttons.find(b => b.id === id), id); if (!b) return false; await tap(b.x + b.w / 2, b.y + b.h / 2); return true; };
   const shot = async n => { if (SHOTS) await page.screenshot({ path: `${OUT}/${n}` }); };
   const wait = ms => page.waitForTimeout(ms);
@@ -74,7 +76,7 @@ const results = []; const ok = (name, cond, extra) => { results.push([name, !!co
   const t0 = await ev(() => G.phaseT); await wait(1500);
   ok('day timer briefly paused while tutorial asks to build', await ev(t0 => Math.abs(G.phaseT - t0) < 0.2, t0));
   const pad = await ev(() => CFG.TOWER_SPOTS[0]);
-  await tap(pad[0], pad[1] - 10); await wait(150);
+  await wtapW(pad[0], pad[1] - 10); await wait(150);
   await ev(() => buildTower(0, 'archer')); await wait(200);
   ok('building the tower auto-advances to step 2', await ev(() => G.towers.length === 1 && G.tut && G.tut.step === 1));
   await ev(() => { G.menu = null; }); await wait(200);

@@ -176,6 +176,18 @@ function renderBottom(ctx) {
   if (G.targeting) text(ctx, `點擊地圖施放「${skillName(h)}」`, CFG.W / 2, CFG.MAP_BOTTOM - 12, 12, '#ffd166', 'center');
   // 敵情按鈕（白天／黃昏）
   if (G.phase === 'day' || G.phase === 'dusk') btn(ctx, CFG.W - 58, CFG.MAP_TOP + 4, 54, 18, '敵情 ▾', () => { G.preview = G.preview && G.preview.t < 10 ? null : { t: 0 }; }, { bg: 'rgba(93,39,93,0.9)', size: 10, id: 'preview' });
+  drawRecenter(ctx);
+}
+// 鏡頭回到預設視角（拖曳平移／雙指或滾輪縮放之後）
+function drawRecenter(ctx) {
+  const x = CFG.W - 34, y = CFG.MAP_BOTTOM - 32, w = 28, h = 26;
+  const home = Cam.home(), off = Math.abs(Cam.x - home.x) + Math.abs(Cam.y - home.y) > 6 || Math.abs(Cam.z - home.z) > 0.02;
+  ctx.fillStyle = off ? 'rgba(20,18,36,0.85)' : 'rgba(20,18,36,0.55)'; ctx.strokeStyle = off ? '#ffd166' : 'rgba(255,209,102,0.5)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 5); ctx.fill(); ctx.stroke();
+  const cx = x + w / 2, cy = y + h / 2; ctx.strokeStyle = off ? '#fff' : '#bbb'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, 6, 0, 7); ctx.moveTo(cx, cy - 10); ctx.lineTo(cx, cy - 3); ctx.moveTo(cx, cy + 3); ctx.lineTo(cx, cy + 10);
+  ctx.moveTo(cx - 10, cy); ctx.lineTo(cx - 3, cy); ctx.moveTo(cx + 3, cy); ctx.lineTo(cx + 10, cy); ctx.stroke();
+  UI.buttons.push({ x: x - 3, y: y - 3, w: w + 6, h: h + 6, id: 'recenter', onTap: () => Cam.recenter() });
 }
 
 // ---------- 建造選單 ----------
@@ -199,6 +211,7 @@ function renderMenu(ctx) {
   const m = G.menu; if (!m) return;
   if (m.kind === 'branch') { renderBranch(ctx, m); return; }
   let cx, cy, opts = [], title = '', info = null, warn = null;
+  ctx.save(); Cam.apply(ctx);   // 射程圈、幽靈預覽、選取標記：世界座標（選單面板本身在畫面座標）
   if (m.kind === 'spot') {
     [cx, cy] = CFG.TOWER_SPOTS[m.i];
     const t = towerAt(m.i);
@@ -244,7 +257,7 @@ function renderMenu(ctx) {
     cx = G.post.x; cy = G.post.y;
     title = `${G.post.name}｜補給範圍 ${CFG.SUPPLY_RADIUS}`;
     rangeCircle(ctx, cx, cy, CFG.SUPPLY_RADIUS, false, '255,209,102');
-    opts.push({ icon: 'depot', label: '遷移', cost: CFG.SUPPLY_MOVE_COST, act: () => { G.menu = null; G.supplyPick = G.post.id; G.choosingSupply = 'move'; } });
+    opts.push({ icon: 'depot', label: '遷移', cost: CFG.SUPPLY_MOVE_COST, act: () => { G.menu = null; G.supplyPick = G.post.id; G.choosingSupply = 'move'; Cam.moveTo(Cam.overview()); } });
   } else {
     [cx, cy] = CFG.PLOTS[m.i];
     const b = buildingAt(m.i);
@@ -260,17 +273,21 @@ function renderMenu(ctx) {
       opts.push({ icon: null, label: '拆除', cost: {}, refund: true, act: () => { demolish(b); G.menu = null; } });
     }
   }
+  // 選取標記
+  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(cx, cy, 16, 10, 0, 0, 7); ctx.stroke();
+  ctx.restore();
+  const wx = cx, wy = cy; [cx, cy] = Cam.w2s(wx, wy); const z = Cam.z;   // 以下：畫面座標
   // 選項排列：塔在上方路段→往下展開；後方地塊→往上展開
   const n = opts.length, ow = 66, oh = 58, gap = 4, extra = m.kind === 'spot' ? 42 : (info ? 30 : 0) + (warn ? 12 : 0);   // 塔選單固定高度：預覽前後按鈕不移動
   const totalW = Math.max(n * ow + (n - 1) * gap, m.kind === 'spot' ? 240 : 0);
   const px = clamp(cx - totalW / 2, 4, CFG.W - totalW - 4);
   let py;
-  if (m.kind === 'plot' || m.kind === 'granary') py = cy - 26 - oh - 6;
+  if (m.kind === 'plot' || m.kind === 'granary') { py = cy - 26 * z - oh - 6; if (py < CFG.MAP_TOP + 18) py = Math.min(CFG.MAP_BOTTOM - oh - 22 - extra, cy + 20 * z + 18); }
   else if (m.kind === 'spot' || m.kind === 'post') {
     // 塔的選單停靠在地圖下緣（或上緣），不遮住射程圈
     const H = oh + 22 + extra;
     py = cy < (CFG.MAP_TOP + CFG.MAP_BOTTOM) / 2 + 40 ? CFG.MAP_BOTTOM - H - 2 : CFG.MAP_TOP + 46;
-    ctx.strokeStyle = 'rgba(255,209,102,0.6)'; ctx.lineWidth = 1; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(cx, cy + (py > cy ? 12 : -40)); ctx.lineTo(clamp(cx, px + 10, px + totalW - 10), py > cy ? py - 18 : py + H - 18); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(255,209,102,0.6)'; ctx.lineWidth = 1; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(cx, cy + (py > cy ? 12 : -40) * z); ctx.lineTo(clamp(cx, px + 10, px + totalW - 10), py > cy ? py - 18 : py + H - 18); ctx.stroke(); ctx.setLineDash([]);
   }
   py = Math.max(CFG.MAP_TOP + 18, py);
   panel(ctx, px - 4, py - 18, totalW + 8, oh + 22 + extra);
@@ -294,8 +311,6 @@ function renderMenu(ctx) {
     iy += 30;
   }
   if (warn) text(ctx, warn, px, iy - 2, 9, '#ff8080', 'left', false);
-  // 選取標記
-  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(cx, cy, 16, 10, 0, 0, 7); ctx.stroke();
 }
 // 塔數值一行文字
 function towerLine(type, lvl, t) {
@@ -337,6 +352,8 @@ function renderSupplyChoice(ctx) {
   ctx.fillStyle = 'rgba(8,6,20,0.45)'; ctx.fillRect(0, CFG.MAP_TOP, CFG.W, CFG.MAP_BOTTOM - CFG.MAP_TOP);
   // 塔位（是否在範圍內）
   const sel = CFG.SUPPLY_SPOTS.find(p => p.id === G.supplyPick);
+  ctx.save(); Cam.apply(ctx);   // 地圖上的旗幟、範圍：世界座標
+  const flagBtns = [];
   for (const [x, y] of CFG.TOWER_SPOTS) {
     const ok = Math.hypot(x - sel.x, y - sel.y) <= CFG.SUPPLY_RADIUS;
     ctx.fillStyle = ok ? '#5fd16b' : '#ff6b6b'; ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill(); ctx.strokeStyle = '#1a1028'; ctx.lineWidth = 1; ctx.stroke();
@@ -351,9 +368,12 @@ function renderSupplyChoice(ctx) {
     ctx.fillStyle = on ? '#ffd166' : 'rgba(255,255,255,0.85)'; ctx.strokeStyle = '#1a1028'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(p.x, p.y, on ? 11 : 8, 0, 7); ctx.fill(); ctx.stroke();
     drawSprite(ctx, 'depot', p.x, p.y + 8, 1.4, false, false, null, 22, 26);
-    text(ctx, p.name, clamp(p.x, 40, CFG.W - 40), p.y + 22, 10, on ? '#ffd166' : '#fff', 'center');
-    UI.buttons.push({ x: p.x - 24, y: p.y - 26, w: 48, h: 56, id: `post_${p.id}`, onTap: () => { G.supplyPick = p.id; } });
+    text(ctx, p.name, clamp(p.x, 40, CFG.WW - 40), p.y + 22, 10, on ? '#ffd166' : '#fff', 'center');
+    const [fx, fy] = Cam.w2s(p.x, p.y + 2), bz = Math.max(Cam.z, 0.8);   // 點擊區（畫面座標；縮小時不小於 0.8 倍）
+    flagBtns.push({ x: fx - 24 * bz, y: fy - 28 * bz, w: 48 * bz, h: 56 * bz, id: `post_${p.id}`, onTap: () => { G.supplyPick = p.id; } });
   }
+  ctx.restore();
+  UI.buttons.push(...flagBtns);
   // 說明面板
   const inf = postInfo(sel), risk = ['低', '中', '高'][sel.risk];
   panel(ctx, 8, 450, 344, 126, 'rgba(26,28,44,0.96)', '#ffd166');
@@ -421,12 +441,14 @@ function handleMapTap(x, y) {
   if (G.screen !== 'play' || G.phase === 'dawn') return;
   if (G.choosingSupply) return;
   if (y < CFG.MAP_TOP || y > CFG.MAP_BOTTOM) return;
+  [x, y] = Cam.s2w(x, y);   // 畫面座標 → 世界座標
+  const hk = Math.max(1, 0.85 / Cam.z);   // 縮小檢視時放寬點擊範圍
   if (G.targeting) { CutIn.request(G.hero, () => castSkill(x, y)); G.targeting = false; return; }
   if (G.menu && G.menu.kind === 'branch') return;
   const hadMenu = !!G.menu; G.menu = null;
-  const si = CFG.TOWER_SPOTS.findIndex(s => Math.abs(s[0] - x) < 18 && y > s[1] - 42 && y < s[1] + 14);
+  const si = CFG.TOWER_SPOTS.findIndex(s => Math.abs(s[0] - x) < 18 * hk && y > s[1] - 42 * hk && y < s[1] + 14 * hk);
   if (si >= 0) { openSpotMenu(si); return; }
-  const pi = CFG.PLOTS.findIndex(p => Math.abs(p[0] - x) < 16 && Math.abs(p[1] - y) < 16);
+  const pi = CFG.PLOTS.findIndex(p => Math.abs(p[0] - x) < 16 * hk && Math.abs(p[1] - y) < 16 * hk);
   if (pi >= 0) {
     if (!buildingAt(pi) && G.phase !== 'day') { toast('後方建築只能在白天建造'); return; }
     openPlotMenu(pi); return;

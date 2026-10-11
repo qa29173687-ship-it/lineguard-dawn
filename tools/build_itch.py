@@ -1,4 +1,4 @@
-"""itch.io HTML5 上傳包：/workspace/game-proto-itch.zip（index.html 在 zip 根目錄、只含可玩檔案）＋ v10 完整包。
+"""itch.io HTML5 上傳包：/workspace/game-proto-itch.zip（index.html 在 zip 根目錄、只含可玩檔案）＋ 版本完整包（VERSION）。
 檢查：檔案數 < 1000、單檔 < 200MB、所有程式／HTML 參照的 assets 路徑存在且大小寫正確、沒有絕對路徑／localhost 網址。
 執行：/workspace/.artenv/bin/python tools/build_itch.py"""
 import os, re, json, zipfile, sys
@@ -43,5 +43,6 @@ def build(out, prefix):
     return len(z.namelist()), os.path.getsize(out)
 n, sz = build('/workspace/game-proto-itch.zip', '')
 print(f'itch zip: {n} files, {sz / 1e6:.1f} MB, raw {sum(os.path.getsize(f) for f in files) / 1e6:.1f} MB, index.html at root')
-n, sz = build('/workspace/game-proto-v10.zip', 'game-proto/')
-print(f'v10 zip: {n} files, {sz / 1e6:.1f} MB')
+VERSION = sys.argv[1] if len(sys.argv) > 1 else "v11"
+n, sz = build(f"/workspace/game-proto-{VERSION}.zip", "game-proto/")
+print(f"{VERSION} zip: {n} files, {sz / 1e6:.1f} MB")

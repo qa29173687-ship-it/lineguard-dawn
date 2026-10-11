@@ -20,6 +20,9 @@ const results = []; const ok = (name, cond, extra) => { results.push([name, !!co
   await page.waitForFunction(() => Art.loaded + Art.failed.length >= Art.total, null, { timeout: 15000 }); await page.evaluate(() => { G.levelId = 0; G.screen = 'select'; });   // 第 0 關＝第 1 階段原始試玩關（回歸測試用）
   const box = await (await page.$('#game')).boundingBox();
   const tap = async (x, y) => { await page.touchscreen.tap(box.x + x / 360 * box.width, box.y + y / 640 * box.height); await page.waitForTimeout(120); };
+  // v11：點世界座標（wtap = v10 版面座標 ×WS；wtapW = 世界座標）。先等鏡頭動畫結束；目標不在畫面內時先把鏡頭移過去
+  const wtapW = async (x, y) => { await page.waitForFunction(() => !Cam.anim, null, { timeout: 3000 }).catch(() => {}); const [sx, sy] = await page.evaluate(([x, y]) => { let [a, b] = Cam.w2s(x, y); if (a < 20 || a > 340 || b < 70 || b > 550) { Cam.set(Cam.posFor(x, y, Cam.z)); [a, b] = Cam.w2s(x, y); } return [a, b]; }, [x, y]); await page.waitForTimeout(60); return tap(sx, sy); };
+  const wtap = (x, y) => wtapW(x * 1.25, y * 1.25);
   const ev = (f, a) => page.evaluate(f, a);
   const shot = async (n, keepBanner) => { if (!SHOTS) return; if (!keepBanner) await ev(() => { G.fx = G.fx.filter(f => f.kind !== 'banner'); }); await page.waitForTimeout(60); await page.screenshot({ path: `${OUT}/${n}` }); };
   ok('art loaded (incl. branch towers + boss)', await ev(() => Art.failed.length === 0 && ['tower_ranger', 'tower_tesla', 'boss_big', 'boss'].every(k => Art.img[k])));
@@ -45,18 +48,18 @@ const results = []; const ok = (name, cond, extra) => { results.push([name, !!co
   ok('supply choice shown at start', await ev(() => G.screen === 'play' && G.choosingSupply === true));
   const t0 = await ev(() => G.phaseT); await page.waitForTimeout(500);
   ok('day timer paused while choosing', await ev(t0 => G.phaseT === t0, t0));
-  await tap(196, 226);                                // 前線中樞旗幟
+  await wtap(196, 226);                                // 前線中樞旗幟
   ok('select front post', await ev(() => G.supplyPick === 'front'));
   await page.waitForTimeout(100); await shot('supply_choice.png');
   await tap(180, 553);                                // 確定
   const post = await ev(() => ({ id: G.post.id, road: Math.round(G.road.total), wood: G.res.wood, lvl: G.hero.lvl, max: G.hero.max }));
-  ok('front post chosen, road longer than east', post.id === 'front' && post.road > 400, post);
+  ok('front post chosen, road longer than east', post.id === 'front' && post.road > 500, post);
   ok('talent effects applied (wood+40, hero Lv3, hp+15%)', post.wood === 210 && post.lvl === 3, post);
   ok('postInfo: front covers all spots, rear does not', await ev(() => postInfo(CFG.SUPPLY_SPOTS[2]).cover === 12 && postInfo(CFG.SUPPLY_SPOTS[0]).cover < 12));
 
   // ---- 建塔：射程預覽（幽靈）----
   await ev(() => __game.give(3000, 3000, 200));
-  await tap(120, 62);                                 // 塔位 0
+  await wtap(120, 62);                                 // 塔位 0
   ok('spot menu open', await ev(() => G.menu && G.menu.kind === 'spot'));
   const menuOpt = await ev(() => UI.buttons.filter(b => /^opt/.test(b.id)).map(b => [b.id, Math.round(b.x + b.w / 2), Math.round(b.y + b.h / 2)]));
   const o0 = menuOpt.find(b => b[0] === 'opt0');
@@ -67,12 +70,12 @@ const results = []; const ok = (name, cond, extra) => { results.push([name, !!co
   ok('second tap builds archer', await ev(() => G.towers.length === 1 && G.towers[0].type === 'archer'));
   ok('talent 石匠 discount applied', await ev(() => G.towers[0].spent.wood === 54));
   // 選取塔：射程圈 + 升級預覽
-  await tap(120, 50);
+  await wtap(120, 50);
   ok('tower menu open with range', await ev(() => G.menu && G.menu.kind === 'spot' && !!towerAt(0)));
   await shot('tower_range.png');
   // 升到 3 級 → 分支
   await ev(() => { upgradeTower(towerAt(0)); upgradeTower(towerAt(0)); G.menu = null; });
-  await tap(120, 50);
+  await wtap(120, 50);
   const brOpt = await ev(() => UI.buttons.filter(b => /^opt/.test(b.id)).map(b => [b.id, Math.round(b.x + b.w / 2), Math.round(b.y + b.h / 2)]));
   await tap(brOpt[0][1], brOpt[0][2]);
   ok('branch modal opens at Lv3', await ev(() => G.menu && G.menu.kind === 'branch'));
@@ -146,8 +149,9 @@ const results = []; const ok = (name, cond, extra) => { results.push([name, !!co
   ok('evolved: +HP, skill renamed', evo.evo && evo.max > preMax * 1.3 && evo.sk === '月光箭雨', evo);
   await ev(() => { G.hero.hx = G.hero.x = 200; G.hero.hy = G.hero.y = 330; });
   await page.waitForTimeout(500);
-  await page.screenshot({ path: `${OUT}/extra_evolved_hero.png`, clip: { x: box.x + (120 / 360) * box.width, y: box.y + (260 / 640) * box.height, width: box.width * 160 / 360, height: box.height * 110 / 640 } });
-  ok('evolved skill: wider pierce rain', await ev(() => { G.hero.cd = 0; castSkill(180, 300); const z = G.zones[G.zones.length - 1]; return z.r === 70 && z.evo; }));
+  await ev(() => Cam.set(Cam.posFor(200, 300, 1))); await page.waitForTimeout(200);
+  { const [cx, cy] = await ev(() => Cam.w2s(200 - 40, 330 - 70)); await page.screenshot({ path: `${OUT}/extra_evolved_hero.png`, clip: { x: box.x + (cx / 360) * box.width, y: box.y + (cy / 640) * box.height, width: box.width * 160 / 360, height: box.height * 110 / 640 } }); }
+  ok('evolved skill: wider pierce rain', await ev(() => { G.hero.cd = 0; castSkill(180, 300); const z = G.zones[G.zones.length - 1]; return z.r === 70 * CFG.WS && z.evo; }));
 
   // ---- 首領 ----
   await ev(() => { G.enemies = []; G.spawnList = []; G.night = 3; });
@@ -190,11 +194,11 @@ const results = []; const ok = (name, cond, extra) => { results.push([name, !!co
 
   // ---- 遷移補給站（白天）----
   await ev(() => { G.phase = 'day'; G.menu = null; G.res.wood = 500; });
-  await tap(196, 222);
+  await wtap(196, 222);
   ok('tap post opens post menu', await ev(() => G.menu && G.menu.kind === 'post'));
   const pm = await ev(() => UI.buttons.find(b => b.id === 'opt0')); await tap(pm.x + 20, pm.y + 20);
   ok('relocate overlay', await ev(() => G.choosingSupply === 'move'));
-  await tap(342, 236);
+  await wtap(342, 236);
   const rel = await ev(() => { const w0 = G.res.wood; G.speed = 1; confirmSupply(); return { post: G.post.id, cost: w0 - G.res.wood, cs: G.choosingSupply }; });
   ok('relocated to east (costs 40 wood)', rel.post === 'east' && rel.cost === 40 && !rel.cs, rel);
 

@@ -205,8 +205,8 @@ const Dialog = {
 };
 
 // ---------- 新手教學：只有第 1 關 3 個短步驟（做完自動前進），其餘功能改成第一次用到時的小提示 ----------
-const padT = i => { const p = CFG.TOWER_SPOTS[i]; return p && { x: p[0], y: p[1] - 10, r: 20 }; };
-const plotT = i => { const p = CFG.PLOTS[i]; return p && { x: p[0], y: p[1], r: 18 }; };
+const padT = i => { const p = CFG.TOWER_SPOTS[i]; return p && { x: p[0], y: p[1] - 10, r: 20, world: true }; };
+const plotT = i => { const p = CFG.PLOTS[i]; return p && { x: p[0], y: p[1], r: 18, world: true }; };
 const btnT = id => { const b = UI.buttons.find(b => b.id === id); return b && { x: b.x + b.w / 2, y: b.y + b.h / 2, r: Math.max(b.w, b.h) / 2 + 4 }; };
 const TUTORIAL = {
   1: [
@@ -232,6 +232,7 @@ const TIPS = [
   { id: 'branch',   text: 'Lv3 塔可以選擇分支', when: () => G.lv && G.lv.branches && G.towers.some(t => t.lvl >= 3 && !t.br) },
   { id: 'evolve',   text: '英雄 Lv10！點左下進化', when: () => G.hero && G.hero.evoReady && !G.hero.evo },
   { id: 'raider',   text: '掠奪者會搶補給線的糧', when: () => G.enemies.some(e => e.d.raider && !e.d.boss) },
+  { id: 'camera',   text: '拖曳移動地圖・雙指／滾輪縮放', when: () => G.phase === 'day' && G.time > 6 && Cam.userAt < 0 },
 ];
 const Tips = {
   update(dt) {
@@ -264,12 +265,16 @@ const Tutorial = {
     if (G.choosingSupply) return;
     tt.t += dt;
     if (s.freeze && G.phase === 'day' && tt.freezeT < TUT_FREEZE_MAX) { G.phaseT += dt; tt.freezeT += dt; }
+    // 目標在畫面外（地圖變大、可捲動）：鏡頭自動移過去（玩家剛手動操作過就不搶）
+    const tg = s.target && s.target();
+    if (tg && tg.world && !G.menu && performance.now() - Cam.userAt > 2500) Cam.ensureVisible(tg.x, tg.y, 60);
     if (s.timer ? tt.t >= s.timer : s.done()) { tt.step++; tt.t = 0; if (tt.step >= TUTORIAL[tt.lv].length) this.finish('done'); }
   },
   draw(ctx) {
     const tt = G.tut; if (!tt || G.screen !== 'play' || G.choosingSupply || G.dawnChoices) return;
     const s = this.cur(); if (!s || (s.phase && G.phase !== s.phase)) return;
-    const tg = s.target && s.target();
+    let tg = s.target && s.target();
+    if (tg && tg.world) { const [x, y] = Cam.w2s(tg.x, tg.y); tg = { x, y, r: tg.r * Cam.z }; }   // 世界座標 → 畫面座標
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 180);
     if (tg && !G.menu) {
       ctx.strokeStyle = `rgba(255,209,102,${0.6 + 0.4 * pulse})`; ctx.lineWidth = 3;

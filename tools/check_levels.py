@@ -4,6 +4,15 @@ from PIL import Image, ImageDraw
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 t = open(os.path.join(ROOT, 'js', 'levels.js'), encoding='utf-8').read()
 L = json.loads(t[t.index('const LEVELS = ') + 15:t.rindex(';')])
+# v11：levels.js 是放大 WS 倍後的世界座標；這裡換回 v10 版面座標再用原本的門檻檢查（版面是等比例放大）
+WS = 1.25
+def us(p): return [p[0] / WS, p[1] / WS] + list(p[2:])
+for lv in L:
+    lv['paths'] = [[us(p) for p in P] for P in lv['paths']]; lv['pads'] = [us(p) for p in lv['pads']]
+    lv['cliffs'] = [[us(p) for p in c] for c in lv['cliffs']]
+    if lv['river']: lv['river'] = [us(p) for p in lv['river']]
+    if lv['supply']:
+        for sp in lv['supply']['spots']: sp['x'] /= WS; sp['y'] /= WS; sp['road'] = [us(p) for p in sp['road']]
 def dseg(p, a, b):
     ax, ay = a; bx, by = b; dx, dy = bx - ax, by - ay; L2 = dx * dx + dy * dy or 1
     k = max(0, min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / L2)); return math.hypot(p[0] - ax - k * dx, p[1] - ay - k * dy)

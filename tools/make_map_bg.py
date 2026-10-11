@@ -1,4 +1,5 @@
-"""合成 HD-2D 風整張地圖背景（720×1280 = 遊戲邏輯畫布 360×640 的 2 倍）。
+"""合成 HD-2D 風整張地圖背景（900×1600 = v11 世界 450×800 的 2 倍；舊版 720×1280 = 360×640 的 2 倍）。
+位置類常數 = v10 版面 × K（世界放大倍率 WS）；道具、塔台、河寬等「尺寸」不放大（版面更寬鬆）。
 幾何讀自 js/levels.js（每關的敵人路線、塔位、補給道路、河流／橋、峭壁），城堡／糧倉／後方建地讀自 js/config.js。
 用法：
   /workspace/.artenv/bin/python tools/make_map_bg.py all        # 產生 assets/maps/level_01.jpg … level_10.jpg
@@ -16,8 +17,12 @@ GRASS = SRC + 'ff39304303d0f076b20f957a35b5fab03a12223cee1810645c9a61e1ffdd902b.
 DIRT = SRC + '35ec5be8e7097a8c13cafdf75a592fd40f59c961a24c699a2349d53737621e0f.jpg'
 PROPS = SRC + 'd15b975369a259300b8c558e4d4ac753d5160ffdbeb2d9027d6d8558fbab2506.jpg'
 REVIEW = '/workspace/art-review/map/'
-S = 2                      # 輸出 = 邏輯座標 × 2
-W, H = 360 * S, 640 * S
+S = 2                      # 輸出 = 世界座標 × 2
+_cfg0 = open(os.path.join(ROOT, 'js', 'config.js'), encoding='utf-8').read()
+def _num(n): return float(re.search(r'\b' + n + r'\s*:\s*([\d.]+)', _cfg0).group(1))
+K, WWL, WHL = _num('WS'), int(_num('WW')), int(_num('WH'))   # 世界放大倍率、世界寬高（邏輯）
+W, H = WWL * S, WHL * S
+AREA = K * K               # 道具數量依面積放大
 ARG = sys.argv[1] if len(sys.argv) > 1 else 'all'
 if ARG == 'all':
     for i in range(1, 11): subprocess.run([sys.executable, __file__, str(i)], check=True)
@@ -48,7 +53,8 @@ else:
     OUT = os.path.join(ROOT, LV['map']); SEED = 20261011 + int(ARG) * 7919
 rng = np.random.default_rng(SEED)
 PATH = PATHS[0]
-REAR_Y = 458
+REAR_Y = 458 * K
+CX, CY = CASTLE
 
 # ---------- 工具 ----------
 YY, XX = np.mgrid[0:H, 0:W].astype(np.float32)
@@ -98,7 +104,7 @@ ground = grass * (1 - rear_m) + meadow * rear_m
 dirt = tile(Image.open(DIRT).convert('RGB'), 0.5)
 dirt = dirt * (0.9 + 0.2 * noise(4, 7, 2, seed=4))[..., None] * np.array([0.98, 0.95, 0.9])
 # 後方翻土小田（只放在不會跟建築地塊衝突的位置）
-TILLED = [(182, 491, 30, 20)]
+TILLED = [(182 * K, 491 * K, 30, 20)]
 for i, (cx, cy, tw, th) in enumerate(TILLED):
     nz = (noise(9, 16, 2, seed=50 + i) - 0.5) * 0.5
     e = np.abs((XX - cx * S) / (tw * S / 2)) ** 4 + np.abs((YY - cy * S) / (th * S / 2)) ** 4 + nz * 0.6   # 圓角矩形小田
@@ -197,43 +203,43 @@ def blocked(x, y):
         if abs(x - px) < 19 and py - 44 < y < py + 13: return True
     for px, py in PLOTS:
         if abs(x - px) < 26 and abs(y - py) < 26: return True
-    if 128 < x < 232 and 362 < y < 474: return True                       # 城堡與駐守士兵
+    if CX - 52 < x < CX + 52 and CY - 70 < y < CY + 42: return True                       # 城堡與駐守士兵
     if DEPOT and abs(x - DEPOT[0]) < 26 and DEPOT[1] - 40 < y < DEPOT[1] + 26: return True
     if RIVER and dW[min(H - 1, max(0, int(y * S))), min(W - 1, max(0, int(x * S)))] / S < 20: return True
 
     if abs(x - GRANARY[0]) < 30 and GRANARY[1] - 44 < y < GRANARY[1] + 26: return True
     for rx, ry in RAIDS:                                                  # 掠奪者從側邊進入的路線
-        if abs(x - rx) < 110 and abs(y - ry) < 22: return True
-    if y > REAR_Y and y < 600: return True                                # 後方建築區保持開闊（只放小物見下）
+        if abs(x - rx) < 110 * K and abs(y - ry) < 22: return True
+    if y > REAR_Y and y < 600 * K: return True                                # 後方建築區保持開闊（只放小物見下）
     return False
 def bbox_clear(x, y, w, h, rear_ok=False):
     for fy in (0.0, 0.3, 0.6, 0.85, 1.0):
         for fx in (-0.5, -0.25, 0, 0.25, 0.5):
             qx, qy = x + fx * w, y - fy * h
-            if qy < -10 or qy > 600 or qx < -20 or qx > 380: continue
+            if qy < -10 or qy > 600 * K or qx < -20 or qx > WWL + 20: continue
             if blocked(qx, qy) and not (rear_ok and qy > REAR_Y and not blocked_rear(qx, qy)): return False
     return True
 def blocked_rear(x, y):
     if pd(x, y) < 14 or rd(x, y) < 8: return True
     for px, py in PLOTS:
         if abs(x - px) < 28 and abs(y - py) < 30: return True
-    if 128 < x < 232 and 362 < y < 506: return True
+    if CX - 52 < x < CX + 52 and CY - 70 < y < CY + 74: return True
     if abs(x - GRANARY[0]) < 32 and GRANARY[1] - 46 < y < GRANARY[1] + 28: return True
     for rx, ry in RAIDS:
-        if abs(x - rx) < 110 and abs(y - ry) < 22: return True
+        if abs(x - rx) < 110 * K and abs(y - ry) < 22: return True
     for cx, cy, tw, th in TILLED:
         if abs(x - cx) < tw / 2 + 4 and abs(y - cy) < th / 2 + 4: return True
     return False
 
 placed = []   # (x, y, kind, img, flip)
 def edge_w(x, y):
-    e = max(0, 1 - min(x, 360 - x) / 55) + max(0, 1 - (y - 30) / 50)
+    e = max(0, 1 - min(x, WWL - x) / 55) + max(0, 1 - (y - 30) / 50)
     return min(1, 0.12 + e)
 def try_place(kinds, n, attempts, hrange, spacing, wfun=edge_w, rear_ok=False):
     got = 0
     for _ in range(attempts):
         if got >= n: break
-        x, y = rng.uniform(-8, 368), rng.uniform(32, 600 if rear_ok else 470)
+        x, y = rng.uniform(-8, WWL + 8), rng.uniform(32, 600 * K if rear_ok else 470 * K)
         if rng.random() > wfun(x, y): continue
         k = kinds[rng.integers(len(kinds))]
         im = scaled(k, h=rng.uniform(*hrange) * S)
@@ -242,13 +248,14 @@ def try_place(kinds, n, attempts, hrange, spacing, wfun=edge_w, rear_ok=False):
         if any(abs(px - x) < spacing * (0.6 + 0.4 * (w / 40)) and abs(py - y) < spacing * 0.7 for px, py, *_ in placed): continue
         placed.append((x, y, k, im, rng.random() < 0.5)); got += 1
 # 森林：邊緣密集
-try_place(['pine1', 'pine2', 'pine3', 'pine1', 'oak1', 'oak2'], 120, 30000, (30, 42), 12)
+A = lambda n: int(round(n * AREA))
+try_place(['pine1', 'pine2', 'pine3', 'pine1', 'oak1', 'oak2'], A(120), A(30000), (30, 42), 12)
 # 開闊草地：零星樹木
-try_place(['pine2', 'oak1', 'oak2'], 8, 6000, (26, 36), 22, wfun=lambda x, y: 0.5)
-try_place(['bush1', 'bush2'], 24, 9000, (11, 15), 16, wfun=lambda x, y: 0.6)
-try_place(['boulder1', 'boulder2', 'rocks'], 12, 8000, (10, 14), 18, wfun=lambda x, y: 0.6)
-try_place(['flowers', 'flowers', 'stump', 'log'], 26, 9000, (9, 13), 18, wfun=lambda x, y: 0.6)
-try_place(['flowers', 'bush1', 'rocks', 'stump'], 7, 8000, (8, 11), 20, wfun=lambda x, y: 0.7, rear_ok=True)
+try_place(['pine2', 'oak1', 'oak2'], A(8), A(6000), (26, 36), 22, wfun=lambda x, y: 0.5)
+try_place(['bush1', 'bush2'], A(24), A(9000), (11, 15), 16, wfun=lambda x, y: 0.6)
+try_place(['boulder1', 'boulder2', 'rocks'], A(12), A(8000), (10, 14), 18, wfun=lambda x, y: 0.6)
+try_place(['flowers', 'flowers', 'stump', 'log'], A(26), A(9000), (9, 13), 18, wfun=lambda x, y: 0.6)
+try_place(['flowers', 'bush1', 'rocks', 'stump'], A(7), A(8000), (8, 11), 20, wfun=lambda x, y: 0.7, rear_ok=True)
 
 # 峭壁：沿線密集擺放大石頭（避開路、塔位）
 for c in CLIFFS:

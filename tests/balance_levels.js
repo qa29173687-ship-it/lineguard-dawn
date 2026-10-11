@@ -24,7 +24,7 @@ const HPMUL = Object.fromEntries((process.env.HPMUL || '').split(',').filter(Boo
       if (G.lv.supply) { G.supplyPick = G.lv.supply.default; confirmSupply(); }
       const log = []; let evoNight = null, lastKey = '';
       // 塔位排序：靠近路線越多段的越好
-      const pads = CFG.TOWER_SPOTS.map((s, i) => { let c = 0; for (const P of G.paths) for (let d = 0; d < P.total; d += 8) { const q = pathAt(P, d); if (Math.hypot(q.x - s[0], q.y - s[1]) < 95) c++; } return [i, c]; }).sort((a, b) => b[1] - a[1]).map(a => a[0]);
+      const pads = CFG.TOWER_SPOTS.map((s, i) => { let c = 0; for (const P of G.paths) for (let d = 0; d < P.total; d += 2 * (CFG.WS || 1))   /* 細取樣：避免版面放大後的四捨五入造成同分塔位順序改變 */ { const q = pathAt(P, d); if (Math.hypot(q.x - s[0], q.y - s[1]) < 95 * (CFG.WS || 1)) c++; } return [i, c]; }).sort((a, b) => b[1] - a[1]).map(a => a[0]);
       const types = G.lv.towers, bats = G.lv.waves.flat(2).some(g => g[0] === 'bat');
       const cycle = ['archer', 'barracks', 'mage', 'cannon', 'archer', 'mage', 'barracks', 'archer', 'cannon', 'archer'].filter(t => types.includes(t));
       const plan = pads.map((s, k) => [s, bats && k % 3 === 0 ? 'archer' : cycle[k % cycle.length]]);
@@ -43,7 +43,7 @@ const HPMUL = Object.fromEntries((process.env.HPMUL || '').split(',').filter(Boo
         }
         if (h && !h.dead && h.evoReady && !h.evo) { evolveHero(); evoNight = `${G.phase}${G.night}`; }
         if (G.phase === 'night' && h && !h.dead && h.cd <= 0 && G.enemies.length && G.mod !== 'noHeroSkill') {
-          let best = null, bs = 0; for (const e of G.enemies) { if (e.under) continue; const n = G.enemies.filter(o => Math.hypot(o.x - e.x, o.y - e.y) < 50).length; if (n > bs) { bs = n; best = e; } }
+          let best = null, bs = 0; for (const e of G.enemies) { if (e.under) continue; const n = G.enemies.filter(o => Math.hypot(o.x - e.x, o.y - e.y) < 50 * (CFG.WS || 1)).length; if (n > bs) { bs = n; best = e; } }
           if (best && bs >= 2) castSkill(best.x, best.y);
         }
         if (G.phase === 'night' && h && !h.dead && G.enemies.length) { const can = e => !e.under && !(h.d.melee && e.d.flying);   /* 近戰英雄不去追打不到的飛行敵人 */ const side = G.enemies.find(e => offPath(e) && can(e)); const e = G.boss && live(G.boss) ? G.boss : side || G.enemies.find(can) || G.enemies[0]; h.hx = e.x; h.hy = e.y + 14; h.moving = true; }
@@ -59,7 +59,7 @@ const HPMUL = Object.fromEntries((process.env.HPMUL || '').split(',').filter(Boo
         const key = G.phase + G.night;
         if (key !== lastKey) { if (G.phase === 'dawn' || G.phase === 'night') log.push(`${G.phase[0]}${G.night}:Lv${G.hero.lvl}${G.hero.evo ? '★' : ''} hp${G.castleHp}`); lastKey = key; }
       }
-      return { L, hero, win: G.end && G.end.win, stars: G.end ? G.end.stars : 0, nights: G.end && G.end.nights, hp: G.castleHp, max: G.castleMax, lvl: G.hero.lvl, evo: G.hero.evo, evoNight, towers: G.towers.length, leak: G.stats.leakBy, kills: G.stats.kills, log: log.join(' ') };
+      return { L, hero, win: G.end && G.end.win, stars: G.end ? G.end.stars : 0, nights: G.end && G.end.nights, hp: G.castleHp, max: G.castleMax, lvl: G.hero.lvl, evo: G.hero.evo, evoNight, towers: G.towers.length, tw: G.towers.map(t => t.spot + (t.br || t.type).slice(0, 3) + t.lvl).join(" "), leak: G.stats.leakBy, kills: G.stats.kills, log: log.join(' ') };
     }, [L, hero, brMode, HPMUL[L] || 0, RAMP[L] || 0]);
     all.push(res); console.log(JSON.stringify(res));
   }
