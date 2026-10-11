@@ -1,0 +1,188 @@
+"""第一章：邊境森林 10 關的資料來源 → 產生 js/levels.js（JSON，遊戲與 tools/make_map_bg.py 共用）。
+修改後執行：/workspace/.artenv/bin/python tools/levels_def.py && /workspace/.artenv/bin/python tools/make_map_bg.py all
+座標＝邏輯座標（360×640）；城堡 (180,432)、糧倉 (318,556) 與後方建地各關相同。
+paths：敵人路線（1～2 條，最後都到城堡）；pads：塔位；plots：後方建地索引（CFG.PLOTS）
+supply：null = 尚未開放補給線（塔直接吃糧倉的糧）；否則為補給站候選（road = 糧倉→補給站）
+waves：每夜 [[種類, 數量, 間隔秒, 路線(可省略=依組別輪流)]...]
+"""
+import json, os
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+G = [334, 548]; G2 = [342, 548]          # 糧倉出口
+REAR = {'id': 'rear', 'name': '城後糧站', 'x': 316, 'y': 444, 'road': [G, G2, [342, 444], [322, 444]], 'risk': 0,
+        'desc': '離糧倉近、運送快，但只能補給後半段的塔'}
+ALL_PLOTS = list(range(11))
+MODS = {
+    'noBarracks': {'name': '不准蓋兵營', 'shards': 2},
+    'max4': {'name': '最多只能蓋 4 座塔', 'shards': 3},
+    'halfCastle': {'name': '城堡血量減半', 'shards': 2},
+    'noHeroSkill': {'name': '英雄不能施放技能', 'shards': 2},
+}
+L = []
+# 1 初到領地：教學、只有弓箭塔與農田
+L.append(dict(id=1, name='初到領地', nights=2, diff='易',
+    intro='領主大人，邊境的第一夜要來了。在路邊石台蓋弓箭塔，在後方空地蓋農田。',
+    tips=['點路邊石台 → 弓箭塔（點兩下）', '後方空地蓋農田：塔晚上要吃糧', '點地圖空地可以移動英雄'],
+    paths=[[[180, 40], [180, 110], [80, 110], [80, 240], [270, 240], [270, 340], [180, 340], [180, 412]]],
+    pads=[[130, 172], [232, 172], [130, 300], [222, 296], [36, 186], [318, 296]],
+    plots=[0, 1, 2, 3, 4, 8], towers=['archer'], buildings=['farm'],
+    start={'wood': 230, 'stone': 40, 'food': 30, 'front': 0}, castle=20, supply=None, raid=[],
+    hp=[0.8, 0.95], xp=1.0, mod='halfCastle',
+    waves=[[[['goblin', 5, 1.6]], [['goblin', 7, 1.3]]],
+           [[['goblin', 8, 1.2]], [['goblin', 10, 1.0]], [['goblin', 12, 0.9]]]]))
+# 2 兵營之路：狹窄隘口
+L.append(dict(id=2, name='兵營之路', nights=3, diff='易',
+    intro='峽谷隘口只容一隊人馬通過。在隘口兩側蓋兵營擋住敵人，弓箭手在後方射擊。',
+    tips=['兵營派出 3 名士兵擋在路上', '隘口兩側的石台最適合蓋兵營'],
+    paths=[[[300, 40], [300, 120], [110, 120], [110, 210], [180, 210], [180, 412]]],
+    pads=[[205, 168], [60, 170], [252, 172], [140, 268], [222, 268], [140, 342], [222, 342]],
+    cliffs=[[[160, 228], [160, 334]], [[200, 228], [200, 334]]],
+    plots=[0, 1, 2, 3, 4, 5, 6, 8], towers=['archer', 'barracks'], buildings=['farm', 'lumber', 'house'],
+    start={'wood': 220, 'stone': 70, 'food': 30, 'front': 0}, castle=20, supply=None, raid=[],
+    hp=[0.85, 1.0, 1.15], xp=1.0, mod='max4',
+    waves=[[[['goblin', 8, 1.3]], [['goblin', 10, 1.1]]],
+           [[['goblin', 10, 1.0]], [['goblin', 12, 0.9]], [['goblin', 14, 0.8]]],
+           [[['goblin', 12, 0.9]], [['goblin', 16, 0.75]], [['goblin', 20, 0.65]]]]))
+# 3 狼嚎之夜：狼騎兵、蜿蜒長路
+L.append(dict(id=3, name='狼嚎之夜', nights=3, diff='易',
+    intro='狼騎兵速度極快。兵營擋不太住牠們——在兵營後方佈置弓箭塔補刀。',
+    tips=['狼騎兵：速度快、血量低', '兵營擋路，弓箭塔在後方收割'],
+    paths=[[[40, 40], [40, 105], [320, 105], [320, 195], [50, 195], [50, 290], [300, 290], [300, 365], [180, 365], [180, 412]]],
+    pads=[[100, 152], [180, 150], [262, 152], [120, 244], [232, 244], [112, 330], [245, 330], [96, 62]],
+    plots=ALL_PLOTS, towers=['archer', 'barracks'], buildings=['farm', 'lumber', 'quarry', 'house'],
+    start={'wood': 210, 'stone': 70, 'food': 30, 'front': 0}, castle=20, supply=None, raid=[],
+    hp=[0.9, 1.05, 1.2], xp=1.0, mod='noBarracks',
+    waves=[[[['goblin', 8, 1.1]], [['goblin', 6, 1.0], ['wolf', 4, 0.9]]],
+           [[['wolf', 8, 0.8]], [['goblin', 10, 0.9], ['wolf', 6, 0.8]], [['wolf', 12, 0.6]]],
+           [[['goblin', 12, 0.8], ['wolf', 6, 0.8]], [['wolf', 14, 0.55]], [['goblin', 14, 0.7], ['wolf', 12, 0.55]]]]))
+# 4 補給的開始：原本的試玩地圖；補給線教學（玩家選補給站）
+L.append(dict(id=4, name='補給的開始', nights=3, diff='中',
+    intro='前線太遠，糧食要靠車隊從糧倉運到補給站。選好補給站位置：越前面覆蓋越多塔，但路越遠。',
+    tips=['塔只吃補給站範圍內的前線糧', '前線糧見底：攻速 -30%、兵營停止補兵', '夜晚可點「烽火」：花前線糧換攻速'],
+    paths=[[[180, 40], [180, 90], [60, 90], [60, 190], [290, 190], [290, 290], [110, 290], [110, 370], [180, 370], [180, 412]]],
+    pads=[[120, 62], [240, 66], [110, 146], [180, 146], [245, 146], [150, 246], [230, 246], [60, 252], [170, 336], [245, 336], [60, 348], [250, 404]],
+    plots=ALL_PLOTS, towers=['archer', 'barracks'], buildings=['farm', 'lumber', 'quarry', 'house'],
+    start={'wood': 190, 'stone': 80, 'food': 30, 'front': 30}, castle=20, raid=[], beacon=True,
+    supply=dict(default='east', spots=[REAR,
+        {'id': 'east', 'name': '東崖補給站', 'x': 342, 'y': 236, 'road': [G, G2, [342, 240]], 'risk': 1, 'desc': '均衡：覆蓋中段與右側，左側塔位補不到'},
+        {'id': 'front', 'name': '前線中樞', 'x': 196, 'y': 226, 'road': [G, G2, [342, 226], [204, 226]], 'risk': 2, 'desc': '覆蓋全部塔位，但路途遙遠'}]),
+    hp=[1.0, 1.15, 1.3], xp=1.0, mod='halfCastle',
+    waves=[[[['goblin', 10, 1.0]], [['goblin', 8, 0.9], ['wolf', 5, 0.8]], [['goblin', 10, 0.8], ['wolf', 6, 0.7]]],
+           [[['goblin', 12, 0.8], ['wolf', 4, 0.8]], [['wolf', 10, 0.6]], [['goblin', 14, 0.7], ['wolf', 8, 0.6]]],
+           [[['goblin', 14, 0.7], ['wolf', 6, 0.7]], [['wolf', 12, 0.55], ['goblin', 8, 0.8]], [['goblin', 18, 0.6], ['wolf', 12, 0.5]]]]))
+# 5 雙路進攻：兩條進攻路線
+L.append(dict(id=5, name='雙路進攻', nights=4, diff='中',
+    intro='敵軍分成兩路從北方森林殺出。兩邊都要顧，別讓任何一路空虛。',
+    tips=['敵人會從左右兩條路進攻', '「敵情」會標出各波的進攻路線', 'Lv3 的塔可以選分支升級'],
+    paths=[[[50, 40], [50, 180], [120, 180], [120, 300], [180, 300], [180, 412]],
+           [[310, 40], [310, 140], [240, 140], [240, 300], [180, 300], [180, 412]]],
+    pads=[[180, 92], [92, 118], [270, 92], [180, 168], [80, 252], [282, 236], [180, 252], [130, 350], [232, 350]],
+    plots=ALL_PLOTS, towers=['archer', 'barracks'], buildings=['farm', 'lumber', 'quarry', 'house'], branches=True,
+    start={'wood': 200, 'stone': 90, 'food': 30, 'front': 30}, castle=20, raid=[], beacon=True,
+    supply=dict(default='east', spots=[REAR,
+        {'id': 'east', 'name': '東坡補給站', 'x': 342, 'y': 236, 'road': [G, G2, [342, 240]], 'risk': 1, 'desc': '照顧右路與中段，左路補不到'},
+        {'id': 'front', 'name': '雙路中樞', 'x': 180, 'y': 214, 'road': [G, G2, [342, 548], [342, 214], [188, 214]], 'risk': 2, 'desc': '夾在兩路中間，覆蓋全部塔位，但路途最遠'}]),
+    hp=[1.0, 1.15, 1.3, 1.45], xp=1.0, mod='noBarracks',
+    waves=[[[['goblin', 6, 1.0, 0], ['goblin', 6, 1.0, 1]], [['wolf', 6, 0.8, 0], ['goblin', 6, 1.0, 1]]],
+           [[['goblin', 8, 0.9, 1], ['wolf', 5, 0.8, 0]], [['goblin', 10, 0.8, 0], ['wolf', 6, 0.7, 1]], [['wolf', 8, 0.6, 0], ['wolf', 8, 0.6, 1]]],
+           [[['goblin', 12, 0.8, 0], ['goblin', 12, 0.8, 1]], [['wolf', 10, 0.6, 0], ['goblin', 10, 0.8, 1]], [['goblin', 12, 0.7, 1], ['wolf', 10, 0.55, 0]]],
+           [[['wolf', 10, 0.6, 0], ['wolf', 10, 0.6, 1]], [['goblin', 16, 0.65, 0], ['wolf', 10, 0.6, 1]], [['goblin', 16, 0.6, 1], ['wolf', 12, 0.5, 0], ['goblin', 10, 0.7, 0]]]]))
+# 6 盾牆：哥布林盾兵、法師塔
+L.append(dict(id=6, name='盾牆', nights=4, diff='中',
+    intro='哥布林盾兵舉盾推進，正面的箭矢傷不了牠們。法師塔的魔法能貫穿重甲，或從側面攻擊。',
+    tips=['盾兵：正面物理傷害 -50%', '法師塔：魔法傷害，對重甲 ×1.5', '長直路兩側的塔能打到盾兵側面'],
+    paths=[[[180, 40], [180, 95], [300, 95], [300, 205], [60, 205], [60, 320], [180, 320], [180, 412]]],
+    pads=[[150, 150], [245, 150], [60, 138], [110, 262], [200, 262], [290, 262], [116, 372], [242, 368], [252, 46]],
+    plots=ALL_PLOTS, towers=['archer', 'barracks', 'mage'], buildings=['farm', 'lumber', 'quarry', 'house'], branches=True,
+    start={'wood': 210, 'stone': 110, 'food': 30, 'front': 30}, castle=20, raid=[], beacon=True,
+    supply=dict(default='east', spots=[REAR,
+        {'id': 'east', 'name': '東林補給站', 'x': 340, 'y': 300, 'road': [G, G2, [342, 304]], 'risk': 1, 'desc': '覆蓋中下段，北邊的塔補不到'},
+        {'id': 'front', 'name': '盾牆前哨', 'x': 200, 'y': 150, 'road': [G, G2, [342, 548], [342, 120], [200, 120], [200, 142]], 'risk': 2, 'desc': '覆蓋大部分塔位（最南角補不到），但路途遙遠'}]),
+    hp=[1.05, 1.2, 1.35, 1.5], xp=1.0, mod='max4',
+    waves=[[[['goblin', 10, 0.9]], [['shield', 4, 1.6], ['goblin', 6, 1.0]]],
+           [[['shield', 5, 1.4], ['goblin', 8, 0.9]], [['wolf', 8, 0.7]], [['shield', 6, 1.3], ['goblin', 10, 0.8]]],
+           [[['goblin', 12, 0.8], ['shield', 5, 1.3]], [['shield', 8, 1.1], ['wolf', 6, 0.7]], [['shield', 8, 1.0], ['goblin', 12, 0.7], ['wolf', 6, 0.7]]],
+           [[['shield', 8, 1.0], ['goblin', 10, 0.8]], [['wolf', 12, 0.55], ['shield', 6, 1.1]], [['shield', 12, 0.9], ['goblin', 14, 0.6], ['wolf', 8, 0.6]]]]))
+# 7 暗夜掠奪：掠奪者首次襲擊補給線
+L.append(dict(id=7, name='暗夜掠奪', nights=4, diff='中',
+    intro='掠奪者從西側森林摸進來，專搶補給車隊和補給站。補給站放越前面，被搶的風險越高。',
+    tips=['掠奪者搶走的糧，打倒牠就能奪回', '讓英雄或塔守住補給線', '補給站越前面，掠奪者越多'],
+    paths=[[[110, 40], [110, 150], [250, 150], [250, 280], [130, 280], [130, 360], [180, 360], [180, 412]]],
+    pads=[[180, 98], [52, 118], [300, 110], [300, 236], [60, 240], [190, 324], [72, 336], [250, 340]],
+    plots=ALL_PLOTS, towers=['archer', 'barracks', 'mage'], buildings=['farm', 'lumber', 'quarry', 'house'], branches=True,
+    start={'wood': 210, 'stone': 110, 'food': 40, 'front': 30}, castle=20, raid=[[-14, 448], [374, 400]], beacon=True,
+    supply=dict(default='east', spots=[REAR,
+        {'id': 'east', 'name': '東溪補給站', 'x': 336, 'y': 270, 'road': [G, G2, [342, 274]], 'risk': 1, 'desc': '均衡：覆蓋中段與右側'},
+        {'id': 'front', 'name': '前線中樞', 'x': 180, 'y': 205, 'road': [G, G2, [342, 548], [342, 200], [188, 200]], 'risk': 2, 'desc': '覆蓋全部塔位，但掠奪者最多'}]),
+    hp=[1.1, 1.25, 1.4, 1.55], xp=1.0, mod='noBarracks',
+    waves=[[[['goblin', 10, 0.9]], [['wolf', 6, 0.7], ['raider', 2, 2.0]]],
+           [[['goblin', 10, 0.8], ['raider', 2, 2.0]], [['shield', 5, 1.3], ['wolf', 6, 0.7]], [['goblin', 12, 0.7], ['raider', 3, 1.6]]],
+           [[['wolf', 10, 0.6], ['raider', 2, 1.8]], [['shield', 7, 1.1], ['goblin', 10, 0.7]], [['goblin', 14, 0.6], ['wolf', 8, 0.6], ['raider', 4, 1.4]]],
+           [[['shield', 8, 1.0], ['raider', 3, 1.5]], [['wolf', 14, 0.5], ['goblin', 10, 0.7]], [['shield', 10, 0.9], ['goblin', 14, 0.6], ['raider', 5, 1.2]]]]))
+# 8 蝙蝠之谷：蝙蝠群＋縱火狂；解鎖砲塔
+L.append(dict(id=8, name='蝙蝠之谷', nights=4, diff='難',
+    intro='山谷裡棲息著大群蝙蝠，只有弓箭塔和英雄打得到。縱火狂會偷偷燒掉後方的農田與糧倉——修復要花木頭。',
+    tips=['蝙蝠會飛：只有弓箭塔與英雄能打', '縱火狂從側面燒後方建築，被燒的建築點一下花木頭修復', '新解鎖：砲塔（範圍傷害）'],
+    paths=[[[180, 40], [180, 80], [60, 80], [60, 175], [300, 175], [300, 270], [60, 270], [60, 360], [180, 360], [180, 412]]],
+    pads=[[120, 138], [240, 138], [100, 222], [180, 222], [260, 222], [120, 316], [240, 316], [300, 62], [312, 340]],
+    cliffs=[[[14, 120], [14, 330]]], valley=True,
+    plots=ALL_PLOTS, towers=['archer', 'barracks', 'mage', 'cannon'], buildings=['farm', 'lumber', 'quarry', 'house'], branches=True,
+    start={'wood': 220, 'stone': 120, 'food': 40, 'front': 30}, castle=20, raid=[[-14, 448], [374, 420]], beacon=True,
+    supply=dict(default='east', spots=[REAR,
+        {'id': 'east', 'name': '谷口補給站', 'x': 340, 'y': 224, 'road': [G, G2, [342, 228]], 'risk': 1, 'desc': '均衡：覆蓋中段與右側'},
+        {'id': 'front', 'name': '谷心營地', 'x': 180, 'y': 128, 'road': [G, G2, [342, 548], [342, 108], [180, 108], [180, 120]], 'risk': 2, 'desc': '覆蓋大部分塔位，但路途遙遠、掠奪者多'}]),
+    hp=[1.15, 1.3, 1.5, 1.7], xp=1.0, mod='halfCastle',
+    waves=[[[['goblin', 10, 0.9], ['bat', 4, 1.0]], [['bat', 8, 0.8], ['arsonist', 1, 1]]],
+           [[['goblin', 12, 0.8], ['bat', 6, 0.9]], [['wolf', 8, 0.6], ['arsonist', 1, 1], ['raider', 2, 1.8]], [['bat', 12, 0.6], ['shield', 5, 1.2]]],
+           [[['shield', 6, 1.1], ['bat', 8, 0.8]], [['wolf', 10, 0.55], ['arsonist', 2, 3], ['raider', 2, 1.6]], [['bat', 14, 0.55], ['goblin', 14, 0.6], ['shield', 6, 1.0]]],
+           [[['bat', 12, 0.6], ['goblin', 12, 0.7], ['arsonist', 1, 1]], [['shield', 10, 0.9], ['wolf', 10, 0.55], ['raider', 3, 1.4]], [['bat', 18, 0.5], ['shield', 10, 0.9], ['goblin', 16, 0.55], ['arsonist', 2, 3]]]]))
+# 9 斷橋河谷：河流分割地圖，地鼠工兵破壞補給道路
+L.append(dict(id=9, name='斷橋河谷', nights=5, diff='難',
+    intro='河谷的舊橋已斷，只剩一座橋能過河。地鼠工兵會從地底鑽出挖斷補給道路——村民會趕去修，但車隊會被卡住。',
+    tips=['地鼠工兵鑽出地面挖路時才打得到', '道路被挖斷：車隊過不去，村民會自動修復', '補給站在河北岸：路長、風險高'],
+    paths=[[[270, 40], [270, 120], [90, 120], [90, 330], [180, 330], [180, 412]]],
+    pads=[[180, 72], [330, 92], [160, 176], [36, 170], [250, 176], [140, 286], [36, 292], [240, 292], [252, 372]],
+    river=[[-10, 240], [90, 230], [180, 238], [270, 226], [370, 234]], bridges=[[90, 230, 'ok'], [342, 232, 'road'], [228, 231, 'broken']],
+    plots=ALL_PLOTS, towers=['archer', 'barracks', 'mage', 'cannon'], buildings=['farm', 'lumber', 'quarry', 'house'], branches=True,
+    start={'wood': 220, 'stone': 130, 'food': 50, 'front': 40}, castle=20, raid=[[-14, 448], [374, 300]], beacon=True,
+    supply=dict(default='east', spots=[REAR,
+        {'id': 'east', 'name': '南岸補給站', 'x': 336, 'y': 300, 'road': [G, G2, [342, 304]], 'risk': 1, 'desc': '河南岸：安全一點，北岸的塔補不到'},
+        {'id': 'front', 'name': '北岸前哨', 'x': 330, 'y': 160, 'road': [G, G2, [342, 164]], 'risk': 2, 'desc': '過河到北岸：覆蓋大部分塔位，但路長又容易被挖斷'}]),
+    hp=[1.2, 1.4, 1.6, 1.8, 2.0], xp=1.0, mod='noHeroSkill',
+    waves=[[[['goblin', 12, 0.8]], [['wolf', 8, 0.6], ['sapper', 1, 1]], [['shield', 5, 1.2], ['goblin', 8, 0.8]]],
+           [[['goblin', 12, 0.7], ['bat', 6, 0.8]], [['shield', 6, 1.1], ['sapper', 1, 1], ['raider', 2, 1.6]], [['wolf', 12, 0.5], ['goblin', 10, 0.7]]],
+           [[['bat', 10, 0.7], ['shield', 6, 1.0]], [['goblin', 14, 0.6], ['sapper', 2, 4], ['arsonist', 1, 1]], [['wolf', 12, 0.5], ['shield', 8, 0.9], ['raider', 3, 1.4]]],
+           [[['shield', 10, 0.9], ['bat', 8, 0.7]], [['wolf', 14, 0.5], ['sapper', 2, 4], ['raider', 2, 1.5]], [['goblin', 18, 0.5], ['shield', 10, 0.85], ['bat', 10, 0.6], ['arsonist', 1, 1]]],
+           [[['bat', 14, 0.55], ['goblin', 14, 0.6], ['sapper', 1, 1]], [['shield', 12, 0.8], ['wolf', 12, 0.5], ['raider', 4, 1.3]], [['goblin', 20, 0.5], ['shield', 12, 0.8], ['bat', 12, 0.55], ['sapper', 2, 4], ['arsonist', 2, 3]]]]))
+# 10 酋長格魯姆：最後一夜首領登場；全敵種
+L.append(dict(id=10, name='酋長格魯姆', nights=5, diff='難',
+    intro='哥布林酋長格魯姆親率大軍來犯。牠每損失四分之一的血就會吹響號角，召喚掠奪者襲擊補給線。',
+    tips=['首領在第 5 夜最後一波登場', '首領是重甲：法師塔與魔法分支特別有效', '號角響起時，記得回防補給線'],
+    paths=[[[40, 40], [40, 150], [140, 150], [140, 250], [60, 250], [60, 340], [180, 340], [180, 412]],
+           [[320, 40], [320, 120], [220, 120], [220, 250], [300, 250], [300, 340], [180, 340], [180, 412]]],
+    pads=[[92, 96], [272, 82], [180, 80], [180, 196], [90, 200], [272, 192], [104, 298], [180, 290], [256, 298]],
+    plots=ALL_PLOTS, towers=['archer', 'barracks', 'mage', 'cannon'], buildings=['farm', 'lumber', 'quarry', 'house'], branches=True,
+    start={'wood': 230, 'stone': 140, 'food': 50, 'front': 40}, castle=20, raid=[[-14, 448], [374, 420]], beacon=True,
+    supply=dict(default='east', spots=[REAR,
+        {'id': 'east', 'name': '東嶺補給站', 'x': 342, 'y': 200, 'road': [G, G2, [342, 204]], 'risk': 1, 'desc': '照顧右路與中段'},
+        {'id': 'front', 'name': '王座前哨', 'x': 180, 'y': 140, 'road': [G, G2, [342, 548], [342, 380], [342, 140], [188, 140]], 'risk': 2, 'desc': '夾在兩路中間，覆蓋全部塔位，掠奪者最多'}]),
+    hp=[1.25, 1.45, 1.65, 1.85, 2.0], xp=1.0, mod='halfCastle', boss='boss',
+    waves=[[[['goblin', 8, 0.9, 0], ['goblin', 8, 0.9, 1]], [['wolf', 8, 0.6, 0], ['bat', 6, 0.8, 1]], [['shield', 6, 1.1, 1], ['goblin', 8, 0.8, 0], ['raider', 2, 1.6]]],
+           [[['shield', 6, 1.0, 0], ['wolf', 8, 0.6, 1]], [['bat', 10, 0.6, 0], ['arsonist', 1, 1], ['goblin', 10, 0.7, 1]], [['wolf', 10, 0.5, 0], ['shield', 8, 0.9, 1], ['raider', 3, 1.4]]],
+           [[['goblin', 14, 0.6, 1], ['bat', 8, 0.7, 0]], [['shield', 10, 0.9, 0], ['sapper', 1, 1], ['wolf', 10, 0.55, 1]], [['goblin', 16, 0.55, 0], ['shield', 8, 0.9, 1], ['raider', 3, 1.3], ['arsonist', 1, 1]]],
+           [[['wolf', 14, 0.5, 0], ['bat', 10, 0.6, 1]], [['shield', 12, 0.8, 1], ['goblin', 12, 0.6, 0], ['sapper', 2, 4]], [['bat', 14, 0.5, 0], ['wolf', 12, 0.5, 1], ['shield', 10, 0.8, 0], ['raider', 4, 1.2]]],
+           [[['goblin', 16, 0.55, 0], ['goblin', 16, 0.55, 1], ['bat', 8, 0.7, 1]], [['shield', 12, 0.8, 0], ['wolf', 14, 0.5, 1], ['arsonist', 2, 3], ['sapper', 1, 1]], [['bat', 14, 0.55, 1], ['shield', 12, 0.8, 1], ['goblin', 16, 0.5, 0], ['raider', 3, 1.3], ['boss', 1, 0, 0]]]]))
+
+# 平衡（tests/balance_levels.js 自動玩家調出來的）：各關敵人血量再乘上這個倍率
+HP_TUNE = {1: 1.0, 2: 1.1, 3: 1.2, 4: 1.6, 5: 1.8, 6: 2.3, 7: 1.9, 8: 1.8, 9: 1.8, 10: 1.35}
+# v9 難度提升（第 4 關起）：HP_TUNE2 全夜倍率 × HP_RAMP 線性坡度（第 1 夜 ×1 → 最後一夜 ×RAMP），前期不至於第一夜就崩、後段夜晚明顯變難
+HP_TUNE2 = {4: 1.36, 10: 0.95}
+HP_RAMP = {4: 1.6, 5: 1.65, 6: 1.34, 7: 1.75, 8: 1.45, 9: 1.8, 10: 1.85}
+for lv in L:
+    n = len(lv['hp']); i0 = lv['id']; r = HP_RAMP.get(i0, 1.0)
+    lv['hp'] = [round(v * HP_TUNE[i0] * HP_TUNE2.get(i0, 1.0) * (1 + (r - 1) * k / max(1, n - 1)), 3) for k, v in enumerate(lv['hp'])]
+    lv.setdefault('cliffs', []); lv.setdefault('river', None); lv.setdefault('bridges', []); lv.setdefault('branches', False); lv.setdefault('beacon', False); lv.setdefault('boss', None); lv.setdefault('valley', False)
+    assert len(lv['waves']) == lv['nights'] == len(lv['hp']), lv['id']
+    lv['map'] = f"assets/maps/level_{lv['id']:02d}.jpg"
+out = '// 自動產生：tools/levels_def.py（請改那邊再重跑）\n// 第一章：邊境森林 10 關\nconst LEVEL_MODS = ' + json.dumps(MODS, ensure_ascii=False) + ';\nconst LEVELS = ' + json.dumps(L, ensure_ascii=False, indent=0).replace('\n', '') + ';\n'
+open(os.path.join(ROOT, 'js', 'levels.js'), 'w', encoding='utf-8').write(out)
+print('levels', len(L), os.path.getsize(os.path.join(ROOT, 'js', 'levels.js')), 'bytes')

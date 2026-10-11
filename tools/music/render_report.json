@@ -1,0 +1,72 @@
+[
+ {
+  "name": "day",
+  "bpm": 88,
+  "seconds": 87.273,
+  "lufs": -16.0,
+  "peak_dbfs": -3.98,
+  "clipped_samples": 0,
+  "loop_seam_jump": 0.00411,
+  "median_step": 0.01084,
+  "p999_step": 0.06886,
+  "notes": 1034,
+  "ogg_kb": 1357,
+  "mp3_kb": 1365
+ },
+ {
+  "name": "night",
+  "bpm": 160,
+  "seconds": 72.0,
+  "lufs": -16.0,
+  "peak_dbfs": -1.5,
+  "clipped_samples": 0,
+  "loop_seam_jump": 0.01014,
+  "median_step": 0.01208,
+  "p999_step": 0.10679,
+  "notes": 1552,
+  "ogg_kb": 1062,
+  "mp3_kb": 1126
+ },
+ {
+  "name": "dusk",
+  "bpm": 100,
+  "seconds": 5.91,
+  "lufs": -17.0,
+  "peak_dbfs": -5.49,
+  "clipped_samples": 0,
+  "loop_seam_jump": 0.0,
+  "median_step": 0.00538,
+  "p999_step": 0.03859,
+  "notes": 28,
+  "ogg_kb": 78,
+  "mp3_kb": 94
+ },
+ {
+  "name": "victory",
+  "bpm": 120,
+  "seconds": 6.326,
+  "lufs": -17.0,
+  "peak_dbfs": -5.51,
+  "clipped_samples": 0,
+  "loop_seam_jump": 0.0,
+  "median_step": 0.00658,
+  "p999_step": 0.10245,
+  "notes": 30,
+  "ogg_kb": 94,
+  "mp3_kb": 100
+ },
+ {
+  "name": "defeat",
+  "bpm": 66,
+  "seconds": 6.999,
+  "lufs": -17.0,
+  "peak_dbfs": -7.36,
+  "clipped_samples": 0,
+  "loop_seam_jump": 0.0,
+  "median_step": 0.01068,
+  "p999_step": 0.05134,
+  "notes": 21,
+  "ogg_kb": 100,
+  "mp3_kb": 110
+ }
+]
